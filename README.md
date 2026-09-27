@@ -41,6 +41,7 @@
 - 手机和电脑处于同一个局域网
 - 路由器不能开启阻止设备互通的 AP 隔离
 - Android 需要允许本应用访问附近网络和文件
+- 需要授予“所有文件访问”权限，才能把文件保存到文件管理器可见的 `Download/FeiQ` 目录
 
 如果发现不了电脑，请确认手机和电脑连接的是同一个 Wi-Fi，并检查 Windows 防火墙是否允许 UDP/TCP `2425` 端口通信。
 
@@ -59,6 +60,20 @@ Android：
 1. 安装 Android Studio、Android SDK 和 JDK 17。
 2. 进入 `android/` 目录。
 3. 执行构建命令，APK 输出到 `app/build/outputs/apk/`。
+
+推送到 GitHub 后，`Build APK` 工作流会自动编译 debug APK，可在 Actions 的 Artifacts 下载；打 `v*` 标签时还会自动发布到 Releases。
+
+### 存储位置
+
+应用数据统一保存在公共目录 `Download/FeiQ`，文件管理器和数据线都能直接查看：
+
+- `received/`：接收到的文件和文件夹
+- `images/`：聊天中的图片
+- `avatars/`：头像
+- `chat/`：聊天记录（JSON）
+- `backup/`：导出的聊天记录文本
+
+首次启动会提示授予“所有文件访问”权限。未授权时数据会退回到应用私有目录（其它应用无法查看），应用功能不受影响；授权后会自动把旧数据复制到公共目录。
 
 ### 技术栈
 
@@ -137,6 +152,7 @@ Download prebuilt APKs from [Releases](https://github.com/zyqg/feiq-android/rele
 - The phone and computer must be on the same LAN
 - Router AP isolation must be disabled
 - Android must allow network and file access
+- The “All files access” permission is required to save files into the file-manager-visible `Download/FeiQ` directory
 
 If peers are not discovered, verify that both devices use the same Wi-Fi and that Windows Firewall allows UDP/TCP traffic on port `2425`.
 
@@ -148,6 +164,18 @@ If peers are not discovered, verify that both devices use the same Wi-Fi and tha
 4. Keep the Windows FeiQ peer on port `2425`, or change the port from the Android “Me” page.
 5. Select a peer from the session list to start chatting.
 
+### Storage
+
+All app data lives in the public `Download/FeiQ` directory, visible in file managers and over USB:
+
+- `received/`: received files and folders
+- `images/`: chat images
+- `avatars/`: avatars
+- `chat/`: chat history (JSON)
+- `backup/`: exported chat transcripts
+
+On first launch the app asks for the “All files access” permission. Without it, data falls back to the app-private directory (invisible to other apps) and everything still works; once granted, existing data is copied to the public directory automatically.
+
 ### Development
 
 JDK 17 and the Android SDK are required.
@@ -156,5 +184,7 @@ JDK 17 and the Android SDK are required.
 cd android
 .\gradlew.bat assembleDebug
 ```
+
+After pushing to GitHub, the `Build APK` workflow builds the debug APK automatically — download it from the Actions artifacts, or push a `v*` tag to publish it to Releases.
 
 The repository contains only the Android source and project documentation. The original Windows executable, Windows runtime files, local tools, generated APKs, and build caches are intentionally excluded.

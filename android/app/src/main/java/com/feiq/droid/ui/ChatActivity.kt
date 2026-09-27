@@ -1,4 +1,4 @@
-﻿package com.feiq.droid.ui
+package com.feiq.droid.ui
 
 import android.app.Activity
 import android.content.ClipData
@@ -50,6 +50,7 @@ import com.feiq.droid.core.App
 import com.feiq.droid.core.ChatRecord
 import com.feiq.droid.core.FeiqEngine
 import com.feiq.droid.core.Prefs
+import com.feiq.droid.core.Storage
 import com.feiq.droid.net.DirFileCodec
 import com.feiq.droid.net.FeiqRichText
 import com.feiq.droid.net.Protocol
@@ -287,7 +288,7 @@ class ChatActivity : BaseActivity() {
 
     private fun exportConversation() {
         try {
-            val dir = File(getExternalFilesDir(android.os.Environment.DIRECTORY_DOCUMENTS), "backup").apply { mkdirs() }
+            val dir = Storage.backupDir(this)
             val f = File(dir, "chat_${peerIp}_${System.currentTimeMillis()}.txt")
             f.writeText(App.repo().exportConversation(peerIp))
             toast("\u5df2\u5bfc\u51fa: ${f.name}")

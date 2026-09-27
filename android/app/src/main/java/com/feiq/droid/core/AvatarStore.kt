@@ -50,8 +50,7 @@ object AvatarStore {
         return out.toByteArray()
     }
 
-    private fun avatarDir(context: Context): File =
-        File(context.filesDir, "avatars").apply { mkdirs() }
+    private fun avatarDir(context: Context): File = Storage.avatarsDir(context)
 
     private fun sanitize(value: String): String =
         value.replace(Regex("[^0-9A-Za-z._-]"), "_")

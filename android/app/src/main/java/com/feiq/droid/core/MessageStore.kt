@@ -6,32 +6,43 @@ import org.json.JSONArray
 import java.io.File
 
 /**
- * 简单的聊天记录持久化：每个对端一个 JSON 文件，存在内部存储。
+ * 简单的聊天记录持久化：每个对端一个 JSON 文件，存在公共目录 `Download/FeiQ/chat`。
  * 免依赖（用 org.json），适合中小规模聊天记录。
+ *
+ * 目录按需解析（而非构造时缓存），这样用户中途授予「所有文件访问」权限后
+ * 无需重启即可切换到公共目录。
  */
-class MessageStore(context: Context) {
-    private val dir = File(context.filesDir, "chat").apply { mkdirs() }
-    private val imgDir = File(context.filesDir, "images").apply { mkdirs() }
+class MessageStore(private val context: Context) {
+    private val dir: File get() = Storage.chatDir(context)
+    private val imgDir: File get() = Storage.imagesDir(context)
 
-    /** 内联图片持久化目录（cache 会被清，这里用 filesDir）。 */
+    /** 旧版内部目录：迁移完成前仍从这里回退读取，避免历史记录丢失。 */
+    private val legacyDir: File get() = File(context.filesDir, "chat")
+
+    /** 图片持久化目录（内联图片、收发图片、表情副本）。 */
     fun imageDir(): File = imgDir
 
     private fun fileFor(peerIp: String) = File(dir, sanitize(peerIp) + ".json")
+    private fun legacyFileFor(peerIp: String) = File(legacyDir, sanitize(peerIp) + ".json")
 
     /** 列出磁盘上所有有聊天记录的对端 IP（供会话列表用）。 */
     fun listPeers(): List<String> {
-        return dir.listFiles { f -> f.isFile && f.name.endsWith(".json") }
-            ?.mapNotNull { it.name.removeSuffix(".json") }
-            ?: emptyList()
+        val names = LinkedHashSet<String>()
+        listOf(dir, legacyDir).forEach { d ->
+            d.listFiles { f -> f.isFile && f.name.endsWith(".json") }
+                ?.forEach { names.add(it.name.removeSuffix(".json")) }
+        }
+        return names.toList()
     }
 
-    /** 删除某对端的聊天文件。 */
+    /** 删除某对端的聊天文件（新旧目录都删）。 */
     fun deletePeer(peerIp: String) {
         try { fileFor(peerIp).delete() } catch (_: Exception) {}
+        try { legacyFileFor(peerIp).delete() } catch (_: Exception) {}
     }
 
     fun load(peerIp: String): MutableList<ChatRecord> {
-        val f = fileFor(peerIp)
+        val f = fileFor(peerIp).takeIf { it.exists() } ?: legacyFileFor(peerIp)
         if (!f.exists()) return mutableListOf()
         return try {
             val arr = JSONArray(f.readText())

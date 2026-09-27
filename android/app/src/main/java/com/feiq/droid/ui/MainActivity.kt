@@ -38,11 +38,17 @@ import com.feiq.droid.core.FeiqEngine
 import com.feiq.droid.core.FeiqService
 import com.feiq.droid.core.NetworkInfo
 import com.feiq.droid.core.Prefs
+import com.feiq.droid.core.Storage
+import com.feiq.droid.core.StoragePermission
 import com.feiq.droid.databinding.ActivityMainBinding
 import com.feiq.droid.net.FeiqRichText
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
+
+private const val REQ_STORAGE = 2
 
 class MainActivity : BaseActivity() {
     private lateinit var binding: ActivityMainBinding
@@ -65,6 +71,9 @@ class MainActivity : BaseActivity() {
     private var cameraAvatarUri: Uri? = null
     private val avatarClicks = HashMap<String, Long>()
     private var showingMeTab: Boolean? = null
+    private var storageDialogShown = false
+    private var storageMigrating = false
+    private val storageAfter = mutableListOf<() -> Unit>()
 
     private val pickAvatar = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { res ->
         if (res.resultCode == Activity.RESULT_OK) {
@@ -128,6 +137,7 @@ class MainActivity : BaseActivity() {
         updateStatus()
         updateMeProfile()
         if (App.isStarted() && pendingShare != null) binding.root.post { showSharePeerPicker() }
+        syncStorageState()
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
@@ -478,7 +488,7 @@ class MainActivity : BaseActivity() {
 
     private fun exportConversation(c: Conv) {
         try {
-            val dir = File(getExternalFilesDir(android.os.Environment.DIRECTORY_DOCUMENTS), "backup").apply { mkdirs() }
+            val dir = Storage.backupDir(this)
             val f = File(dir, "chat_${c.ip}_${System.currentTimeMillis()}.txt")
             f.writeText(App.repo().exportConversation(c.ip))
             toast("\u5df2\u5bfc\u51fa: ${f.name}")
@@ -508,7 +518,57 @@ class MainActivity : BaseActivity() {
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        startEngine()
+        if (requestCode == REQ_STORAGE) {
+            if (Storage.hasAllFilesAccess(this)) migrateStorageThen { rebuildConvs() }
+        } else {
+            startEngine()
+        }
+    }
+
+    /** 检查存储权限：已授权则迁移旧数据；未授权则提示一次。 */
+    private fun syncStorageState() {
+        if (Storage.hasAllFilesAccess(this)) {
+            if (!Prefs.isStorageMigrated(this)) migrateStorageThen { rebuildConvs() }
+        } else if (!storageDialogShown) {
+            storageDialogShown = true
+            showStorageDialog()
+        }
+    }
+
+    private fun showStorageDialog() {
+        AlertDialog.Builder(this)
+            .setTitle("设置存储目录")
+            .setMessage(
+                "接收的文件将保存到公共目录 Download/FeiQ，文件管理器可直接查看。\n\n" +
+                    "需要授予“所有文件访问”权限；未授权时文件会保存在应用私有目录，其它应用无法查看。"
+            )
+            .setPositiveButton("去授权") { _, _ ->
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    if (!StoragePermission.openAllFilesAccessSettings(this)) {
+                        toast("请在系统设置中为“飞秋”开启“所有文件访问”")
+                    }
+                } else {
+                    ActivityCompat.requestPermissions(
+                        this, arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE), REQ_STORAGE
+                    )
+                }
+            }
+            .setNegativeButton("暂不", null)
+            .show()
+    }
+
+    /** 在后台把旧存储目录的数据拷贝到公共目录，完成后执行 after。 */
+    private fun migrateStorageThen(after: () -> Unit) {
+        storageAfter.add(after)
+        if (storageMigrating) return
+        storageMigrating = true
+        lifecycleScope.launch {
+            withContext(Dispatchers.IO) { Storage.migrateLegacy(this@MainActivity) }
+            storageMigrating = false
+            val callbacks = storageAfter.toList()
+            storageAfter.clear()
+            callbacks.forEach { it() }
+        }
     }
 
     private fun startEngine() {

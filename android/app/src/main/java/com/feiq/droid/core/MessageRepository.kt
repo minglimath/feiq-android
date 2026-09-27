@@ -229,11 +229,7 @@ class MessageRepository(
         }
     }
 
-    fun downloadDir(): File {
-        val dir = File(appContext.getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS), "received")
-        if (!dir.exists()) dir.mkdirs()
-        return dir
-    }
+    fun downloadDir(): File = Storage.receivedDir(appContext)
 
     fun acceptFile(peerIp: String, rec: ChatRecord) {
         val key = "$peerIp|${rec.packetId}|${rec.fileId}"
