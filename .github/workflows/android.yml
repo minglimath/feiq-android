@@ -32,11 +32,16 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          # 该 action 的 packages 默认值是 'tools platform-tools'，但 tools 包已从
+          # Google SDK 仓库移除，沿用默认值会让 sdkmanager 直接以
+          # "Failed to find package 'tools'" 退出。这里只保留 platform-tools。
+          packages: 'platform-tools'
 
       - name: Install SDK components
         run: |
           yes | sdkmanager --licenses > /dev/null || true
-          sdkmanager "platform-tools" "platforms;android-35" "build-tools;36.0.0"
+          sdkmanager "platforms;android-35" "build-tools;36.0.0"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
