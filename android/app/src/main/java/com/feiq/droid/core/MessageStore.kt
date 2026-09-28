@@ -46,11 +46,40 @@ class MessageStore(private val context: Context) {
         if (!f.exists()) return mutableListOf()
         return try {
             val arr = JSONArray(f.readText())
-            MutableList(arr.length()) { ChatRecord.fromJson(arr.getJSONObject(it)) }
+            val pairs = Storage.legacyPathPairs(context)
+            MutableList(arr.length()) { remapPaths(ChatRecord.fromJson(arr.getJSONObject(it)), pairs) }
         } catch (e: Exception) {
             Log.w("MessageStore", "load ${f.name} failed: ${e.message}")
             mutableListOf()
         }
+    }
+
+    /**
+     * 数据迁移到公共目录后，把记录里指向旧目录的绝对路径改写到新位置。
+     * 只有新位置的文件确实存在时才改写，所以未授权（没迁移）时行为不变。
+     */
+    private fun remapPaths(rec: ChatRecord, pairs: List<Pair<String, String>>): ChatRecord {
+        if (pairs.isEmpty()) return rec
+        var out = rec
+        rec.filePath?.let { p ->
+            val n = remapPath(p, pairs)
+            if (n != p) out = out.copy(filePath = n)
+        }
+        rec.imagePath?.let { p ->
+            val n = remapPath(p, pairs)
+            if (n != p) out = out.copy(imagePath = n)
+        }
+        return out
+    }
+
+    private fun remapPath(path: String, pairs: List<Pair<String, String>>): String {
+        pairs.forEach { (old, new) ->
+            if (path.startsWith(old)) {
+                val candidate = new + path.substring(old.length)
+                if (File(candidate).exists()) return candidate
+            }
+        }
+        return path
     }
 
     fun loadPage(peerIp: String, fromIndex: Int, limit: Int): List<ChatRecord> {

@@ -1,15 +1,22 @@
 package com.feiq.droid.ui
 
+import android.Manifest
+import android.os.Build
 import android.os.Bundle
 import android.view.View
 import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
+import androidx.core.app.ActivityCompat
 import com.feiq.droid.R
 import com.feiq.droid.core.App
 import com.feiq.droid.core.NetworkInfo
 import com.feiq.droid.core.Prefs
+import com.feiq.droid.core.Storage
+import com.feiq.droid.core.StoragePermission
 import com.feiq.droid.databinding.ActivitySettingsBinding
+
+private const val REQ_STORAGE_SETTINGS = 3
 
 class SettingsActivity : BaseActivity() {
     private lateinit var b: ActivitySettingsBinding
@@ -29,6 +36,7 @@ class SettingsActivity : BaseActivity() {
         b.rowNight.setOnClickListener { showNightMenu() }
         b.rowFont.setOnClickListener { showFontMenu() }
         b.rowPort.setOnClickListener { showPortEdit() }
+        b.rowStorage.setOnClickListener { showStorageMenu() }
         b.rowClearAll.setOnClickListener { confirmClearAll() }
         b.rowAbout.setOnClickListener { showAbout() }
 
@@ -52,7 +60,66 @@ class SettingsActivity : BaseActivity() {
         b.valNight.text = nightLabels[Prefs.nightMode(this).coerceIn(0, nightLabels.lastIndex)]
         b.valFont.text = fontLabels[Prefs.fontScale(this).coerceIn(0, fontLabels.lastIndex)]
         b.valPort.text = Prefs.port(this).toString()
+        b.valStorage.text = storageSummary()
         b.valVersion.text = "v${versionName()}"
+    }
+
+    /** 当前实际使用的存储目录；未授权时会回退到应用私有目录。 */
+    private fun storageSummary(): String {
+        val path = Storage.root(this).absolutePath
+        return if (Storage.hasAllFilesAccess(this)) {
+            "$path\n（文件管理器可直接查看）"
+        } else {
+            "$path\n（未授予「所有文件访问」，其它应用看不到）"
+        }
+    }
+
+    private fun showStorageMenu() {
+        val path = Storage.root(this).absolutePath
+        if (Storage.hasAllFilesAccess(this)) {
+            FeiqBottomSheet.menu(
+                this,
+                "存储位置",
+                "当前目录：\n$path\n\n接收的文件、图片、头像和聊天记录都保存在这里，文件管理器可直接打开。",
+                listOf(FeiqBottomSheet.Action("知道了", R.drawable.ic_folder) {}),
+            )
+        } else {
+            FeiqBottomSheet.menu(
+                this,
+                "存储位置",
+                "当前目录：\n$path\n\n这是应用私有目录，其它应用看不到。要保存到文件管理器可见的 Download/FeiQ，" +
+                    "需要授予「所有文件访问」权限。授权后旧数据会自动复制过去。",
+                listOf(
+                    FeiqBottomSheet.Action("去授权", R.drawable.ic_settings) { requestStorageAccess() },
+                    FeiqBottomSheet.Action("知道了", R.drawable.ic_folder) {},
+                ),
+            )
+        }
+    }
+
+    private fun requestStorageAccess() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            if (!StoragePermission.openAllFilesAccessSettings(this)) {
+                toast("请在系统设置中为“飞秋”开启“所有文件访问”")
+            }
+        } else {
+            ActivityCompat.requestPermissions(
+                this, arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE), REQ_STORAGE_SETTINGS
+            )
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (::b.isInitialized) refreshValues()
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == REQ_STORAGE_SETTINGS) {
+            refreshValues()
+            if (Storage.hasAllFilesAccess(this)) toast("已开启，文件将保存到 Download/FeiQ")
+        }
     }
 
     private fun bindSwitch(sw: Switch, init: Boolean, onChange: (Boolean) -> Unit) {

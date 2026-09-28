@@ -66,6 +66,24 @@ object Storage {
         ctx.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS)?.let { File(it, "backup") to backupDir(ctx) },
     )
 
+    /**
+     * 旧目录 → 新目录的绝对路径前缀映射，用于把旧聊天记录里的 `filePath` / `imagePath`
+     * 改写到新位置，这样迁移过去的旧文件也能直接从公共目录打开。
+     */
+    fun legacyPathPairs(ctx: Context): List<Pair<String, String>> {
+        val out = ArrayList<Pair<String, String>>()
+        fun add(old: File?, new: File) {
+            val o = old?.absolutePath ?: return
+            val n = new.absolutePath
+            if (o != n) out.add(o to n)
+        }
+        add(File(ctx.filesDir, "images"), imagesDir(ctx))
+        add(File(ctx.filesDir, "avatars"), avatarsDir(ctx))
+        add(ctx.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)?.let { File(it, "received") }, receivedDir(ctx))
+        add(ctx.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS)?.let { File(it, "backup") }, backupDir(ctx))
+        return out
+    }
+
     /** 首次获得权限后把旧目录的数据拷贝到新目录。可重复调用，成功一次后不再执行。 */
     fun migrateLegacy(ctx: Context) {
         if (!hasAllFilesAccess(ctx)) return
