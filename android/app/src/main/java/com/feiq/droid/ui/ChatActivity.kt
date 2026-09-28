@@ -361,6 +361,8 @@ class ChatActivity : BaseActivity() {
         }
         if (rec.kind == ChatRecord.KIND_FILE && rec.fileStatus == ChatRecord.FS_DONE && rec.filePath != null) {
             actions.add(MessageAction("打开") { openFile(rec.filePath!!) })
+            // 文件夹不能通过 ACTION_SEND 分享，只对单个文件提供
+            if (!rec.isDir) actions.add(MessageAction("分享") { shareFile(rec) })
         }
         if (rec.dir == ChatRecord.DIR_OUT && rec.status == ChatRecord.STATUS_FAILED) {
             actions.add(MessageAction("重发") { resend(rec) })
@@ -1161,7 +1163,8 @@ class ChatActivity : BaseActivity() {
     }
 
     private fun bindFileCard(v: View, bubble: LinearLayout, rec: ChatRecord) {
-        v.findViewById<LinearLayout>(R.id.fileCard).visibility = View.VISIBLE
+        val fileCard = v.findViewById<LinearLayout>(R.id.fileCard)
+        fileCard.visibility = View.VISIBLE
         v.findViewById<TextView>(R.id.fileName).text = rec.fileName
         v.findViewById<TextView>(R.id.fileIcon).text = if (rec.isDir) "夹" else "文"
         val sizeTv = v.findViewById<TextView>(R.id.fileSize)
@@ -1182,8 +1185,16 @@ class ChatActivity : BaseActivity() {
         } else {
             actions.visibility = View.GONE
         }
-        if (rec.fileStatus == ChatRecord.FS_DONE && rec.filePath != null) {
-            bubble.setOnClickListener { openFile(rec.filePath!!) }
+        // fileCard 是 bubble 的子 View，而 getView 里给它挂了长按监听；
+        // LONG_CLICKABLE 会让它消费掉 ACTION_DOWN，所以单击传不到 bubble，
+        // 必须给 fileCard 自己也挂上点击监听。view 会被复用，未就绪时要清空。
+        val path = rec.filePath
+        if (rec.fileStatus == ChatRecord.FS_DONE && path != null) {
+            bubble.setOnClickListener { openFile(path) }
+            fileCard.setOnClickListener { openFile(path) }
+        } else {
+            bubble.setOnClickListener(null)
+            fileCard.setOnClickListener(null)
         }
     }
 
@@ -1225,6 +1236,35 @@ class ChatActivity : BaseActivity() {
             startActivity(Intent.createChooser(i, "\u6253\u5f00\u6587\u4ef6"))
         } catch (e: Exception) {
             toast("\u65e0\u6cd5\u6253\u5f00: ${e.message}")
+        }
+    }
+
+    /** 把收到的文件通过系统分享面板发给其他应用。 */
+    private fun shareFile(rec: ChatRecord) {
+        val path = rec.filePath ?: return
+        try {
+            val uri = if (path.startsWith("content://")) {
+                Uri.parse(path)
+            } else {
+                val f = File(path)
+                if (!f.exists()) {
+                    toast("文件不存在")
+                    return
+                }
+                FileProvider.getUriForFile(this, "$packageName.fileprovider", f)
+            }
+            // 用记录里的文件名猜类型：对 content:// 记录，File(path).name 取不到真名
+            val mime = URLConnection.guessContentTypeFromName(rec.fileName) ?: "*/*"
+            val i = Intent(Intent.ACTION_SEND).apply {
+                type = mime
+                putExtra(Intent.EXTRA_STREAM, uri)
+                // 部分应用（如微信）只读 clipData，不读 EXTRA_STREAM
+                clipData = ClipData.newUri(contentResolver, rec.fileName, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            startActivity(Intent.createChooser(i, "分享文件"))
+        } catch (e: Exception) {
+            toast("分享失败: ${e.message}")
         }
     }
 
