@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.net.URLConnection
 
 class MessageRepository(
     private val appContext: Context,
@@ -181,8 +182,12 @@ class MessageRepository(
             engine.inlineImages.collect { img ->
                 if (Prefs.isBlocked(appContext, img.peerIp)) return@collect
                 val path = try {
-                    val f = File(store.imageDir(), "inline_${img.imageId}_${img.data.size}.img")
+                    // 按文件头嗅探真实类型再定扩展名。原先固定存成 .img，
+                    // 而 MediaStore 靠扩展名判类型，.img 不会被索引、相册看不到。
+                    val (ext, mime) = MediaIndex.sniff(img.data)
+                    val f = File(store.imageDir(), "inline_${img.imageId}_${img.data.size}.$ext")
                     f.writeBytes(img.data)
+                    if (Prefs.autoIndexImages(appContext)) MediaIndex.indexImage(appContext, f, mime)
                     f.absolutePath
                 } catch (_: Exception) {
                     null
@@ -263,6 +268,7 @@ class MessageRepository(
             if (saved != null) {
                 rec.fileStatus = ChatRecord.FS_DONE
                 rec.filePath = saved
+                indexIfImage(saved)
             } else {
                 rec.fileStatus = ChatRecord.FS_FAILED
             }
@@ -275,6 +281,14 @@ class MessageRepository(
         rec.fileStatus = ChatRecord.FS_REJECTED
         pendingIncoming.remove("$peerIp|${rec.packetId}|${rec.fileId}")
         touch(peerIp)
+    }
+
+    /** 收到的文件如果是图片，按开关登记进系统相册。 */
+    private fun indexIfImage(path: String) {
+        if (!Prefs.autoIndexImages(appContext)) return
+        val mime = URLConnection.guessContentTypeFromName(path) ?: return
+        if (!mime.startsWith("image/")) return
+        MediaIndex.indexImage(appContext, File(path), mime)
     }
 
     private fun uniqueFile(dir: File, name: String): File {

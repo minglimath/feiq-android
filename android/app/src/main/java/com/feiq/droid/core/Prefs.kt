@@ -24,6 +24,7 @@ object Prefs {
     private const val KEY_RICH_COLOR = "rich_color"
     private const val KEY_RICH_HEIGHT = "rich_height"
     private const val KEY_STORAGE_MIGRATED = "storage_migrated"
+    private const val KEY_AUTO_INDEX_IMAGES = "auto_index_images"
 
     private fun sp(ctx: Context) = ctx.getSharedPreferences(FILE, Context.MODE_PRIVATE)
     private fun peerKey(prefix: String, peerIp: String): String {
@@ -148,6 +149,11 @@ object Prefs {
     fun isStorageMigrated(ctx: Context) = sp(ctx).getBoolean(KEY_STORAGE_MIGRATED, false)
     fun setStorageMigrated(ctx: Context, v: Boolean) =
         sp(ctx).edit().putBoolean(KEY_STORAGE_MIGRATED, v).apply()
+
+    /** 收到的图片是否自动登记进系统相册。 */
+    fun autoIndexImages(ctx: Context) = sp(ctx).getBoolean(KEY_AUTO_INDEX_IMAGES, true)
+    fun setAutoIndexImages(ctx: Context, v: Boolean) =
+        sp(ctx).edit().putBoolean(KEY_AUTO_INDEX_IMAGES, v).apply()
 
     fun clearSession(ctx: Context, peerIp: String) {
         sp(ctx).edit()

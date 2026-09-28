@@ -44,6 +44,7 @@ class SettingsActivity : BaseActivity() {
         bindSwitch(b.swVibrate, Prefs.notifyVibrate(this)) { Prefs.setNotifyVibrate(this, it) }
         bindSwitch(b.swSound, Prefs.notifySound(this)) { Prefs.setNotifySound(this, it) }
         bindSwitch(b.swAutoFile, Prefs.autoRecvFile(this)) { Prefs.setAutoRecvFile(this, it) }
+        bindSwitch(b.swAutoIndex, Prefs.autoIndexImages(this)) { Prefs.setAutoIndexImages(this, it) }
 
         refreshValues()
     }

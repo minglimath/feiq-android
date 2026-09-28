@@ -229,6 +229,34 @@
 
                 <View style="@style/SettingDivider" />
 
+                <LinearLayout style="@style/SettingRow">
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="图片自动进相册"
+                            android:textColor="@color/text_primary"
+                            android:textSize="15sp" />
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="3dp"
+                            android:text="收到的图片登记到系统相册，可在相册里直接看到"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="12sp" />
+                    </LinearLayout>
+                    <Switch
+                        android:id="@+id/swAutoIndex"
+                        style="@style/SettingSwitch"
+                        android:layout_marginStart="12dp" />
+                </LinearLayout>
+
+                <View style="@style/SettingDivider" />
+
                 <LinearLayout
                     android:id="@+id/rowPort"
                     style="@style/SettingRow"
