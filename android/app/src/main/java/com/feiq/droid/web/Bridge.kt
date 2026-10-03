@@ -1,35 +1,35 @@
-package com.feiq.droid.bridge
+package com.feiq.droid.web
 
 import android.util.Log
 import com.feiq.droid.core.ChatMessage
 import com.feiq.droid.core.FeiqEngine
 import com.feiq.droid.core.Peer
-import com.sun.net.httpserver.HttpExchange
-import com.sun.net.httpserver.HttpServer
+import com.feiq.droid.web.MiniHttp.Req
+import com.feiq.droid.web.MiniHttp.Resp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import java.io.File
 import java.io.OutputStream
-import java.net.InetSocketAddress
+import java.net.URLConnection
 import java.net.URLDecoder
 import java.net.URLEncoder
 import java.util.ArrayDeque
 import java.util.concurrent.CopyOnWriteArrayList
-import java.util.concurrent.Executors
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 
 /**
  * 网页桥：把 [FeiqEngine] 的能力通过 HTTP + SSE 暴露给浏览器。
  *
- * 刻意做到**零第三方依赖**，方便直接丢到机顶盒上跑：
- * - HTTP 用 JDK 自带的 `com.sun.net.httpserver`
- * - 服务端 → 浏览器 的推送用 SSE（Server-Sent Events），不用 WebSocket
- *   —— 内置 HttpServer 没有 WebSocket，而推送是单向的，SSE 用普通 HTTP 就够
- * - 浏览器 → 服务端 的操作用表单/查询参数，服务端因此不需要 JSON 解析器
- * - 上传文件直接以原始字节作为请求体（不走 multipart），省掉一个解析器
+ * 这个类被**手机 App 和机顶盒 JVM 共用**（放在 app 模块里，`:bridge` 通过 srcDirs 复用），
+ * 所以刻意做到零第三方依赖、不碰任何 Android 专属 API：
+ * - HTTP 服务端是自己写的 [MiniHttp]（Android 上没有 `com.sun.net.httpserver`）
+ * - 服务端 → 浏览器 的推送用 SSE；浏览器 → 服务端 用表单/查询参数 + 原始字节上传
+ * - JSON 只写不读
+ *
+ * 页面内容由 [pageProvider] 提供：App 端从 assets 读，机顶盒端从 classpath 读。
  */
 class Bridge(
     private val engine: FeiqEngine,
@@ -37,14 +37,16 @@ class Bridge(
     private val protocolPort: Int,
     private val nick: String,
     workDir: File,
+    private val pageProvider: () -> String?,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val clients = CopyOnWriteArrayList<SseClient>()
     private val recent = ArrayDeque<ChatMessage>()
     private val hub = MediaHub(engine, workDir, ::broadcast)
+    private val server = MiniHttp(httpPort) { req, resp -> handle(req, resp) }
 
-    @Volatile private var peers: List<Peer> = emptyList()
-    private var server: HttpServer? = null
+    @Volatile
+    private var peers: List<Peer> = emptyList()
 
     private class SseClient {
         val queue = LinkedBlockingQueue<String>()
@@ -54,11 +56,7 @@ class Bridge(
     }
 
     fun start() {
-        val srv = HttpServer.create(InetSocketAddress(httpPort), 0)
-        srv.executor = Executors.newCachedThreadPool()
-        srv.createContext("/") { ex -> handle(ex) }
-        srv.start()
-        server = srv
+        server.start()
         hub.start()
 
         scope.launch {
@@ -77,11 +75,7 @@ class Bridge(
     }
 
     fun stop() {
-        try {
-            server?.stop(0)
-        } catch (_: Exception) {
-        }
-        server = null
+        server.stop()
         hub.stop()
     }
 
@@ -116,7 +110,7 @@ class Bridge(
 
     private fun infoJson(): String = Json.obj(
         "nick" to nick,
-        "localIp" to (localIp() ?: ""),
+        "localIp" to (localIpOrEmpty()),
         "protocolPort" to protocolPort,
         "httpPort" to httpPort,
         "peerCount" to peers.size,
@@ -127,54 +121,59 @@ class Bridge(
         "blobs" to Json.Raw(hub.blobsJson()),
     )
 
+    /** 由宿主覆盖（App 用 NetworkInfo，机顶盒用网卡枚举）。 */
+    var localIpProvider: () -> String? = { null }
+
+    private fun localIpOrEmpty(): String = localIpProvider() ?: ""
+
     // ---------------- 路由 ----------------
 
-    private fun handle(ex: HttpExchange) {
-        val path = ex.requestURI.path
+    private fun handle(req: Req, resp: Resp) {
+        val path = req.path
         try {
             when (path) {
-                "/", "/index.html" -> serveIndex(ex)
-                "/api/info" -> respondJson(ex, infoJson())
-                "/api/peers" -> respondJson(ex, peersJson())
-                "/api/history" -> respondJson(ex, historyJson())
-                "/api/files" -> respondJson(ex, filesJson())
-                "/api/events" -> sse(ex)
-                "/api/send" -> sendText(ex)
-                "/api/accept" -> acceptFile(ex)
-                "/api/upload" -> uploadFile(ex)
-                "/api/blob" -> serveBlob(ex)
+                "/", "/index.html" -> serveIndex(resp)
+                "/api/info" -> respondJson(resp, infoJson())
+                "/api/peers" -> respondJson(resp, peersJson())
+                "/api/history" -> respondJson(resp, historyJson())
+                "/api/files" -> respondJson(resp, filesJson())
+                "/api/events" -> sse(resp)
+                "/api/send" -> sendText(req, resp)
+                "/api/accept" -> acceptFile(req, resp)
+                "/api/upload" -> uploadFile(req, resp)
+                "/api/blob" -> serveBlob(req, resp)
                 "/api/refresh" -> {
                     engine.refresh()
-                    respondJson(ex, OK)
+                    respondJson(resp, OK)
                 }
 
-                else -> respond(ex, 404, TYPE_TEXT, "not found")
+                else -> respond(resp, 404, TYPE_TEXT, "not found")
             }
         } catch (e: Exception) {
             Log.e(TAG, "处理 $path 失败: ${e.message}", e)
-            runCatching { respond(ex, 500, TYPE_TEXT, "error: ${e.message}") }
-        } finally {
-            runCatching { ex.close() }
+            // SSE 已经把响应头发出去了，不能再写第二个响应
+            if (!resp.committed) {
+                runCatching { respond(resp, 500, TYPE_TEXT, "error: ${e.message}") }
+            }
         }
     }
 
-    private fun serveIndex(ex: HttpExchange) {
-        val html = javaClass.getResourceAsStream("/web/index.html")
-            ?.use { it.readBytes().toString(Charsets.UTF_8) }
+    private fun serveIndex(resp: Resp) {
+        val html = pageProvider()
         if (html == null) {
-            respond(ex, 500, TYPE_TEXT, "web/index.html 没有打包进来")
+            respond(resp, 500, TYPE_TEXT, "网页文件缺失（assets/web/index.html）")
         } else {
-            respond(ex, 200, "text/html; charset=utf-8", html)
+            respond(resp, 200, "text/html; charset=utf-8", html)
         }
     }
 
-    private fun sendText(ex: HttpExchange) {
-        if (!requirePost(ex)) return
-        val form = parseQuery(ex.requestBody.use { it.readBytes().toString(Charsets.UTF_8) })
+    private fun sendText(req: Req, resp: Resp) {
+        if (!requirePost(req, resp)) return
+        val form = parseQuery(req.body.use { it.readBytes().toString(Charsets.UTF_8) })
         val peer = form["peer"].orEmpty().trim()
         val text = form["text"].orEmpty()
         if (peer.isEmpty() || text.isBlank()) {
-            respondJson(ex, Json.obj("ok" to false, "error" to "peer 和 text 不能为空"))
+            respondJson(resp, Json.obj("ok" to false, "error" to "peer 和 text 不能为空"))
             return
         }
         engine.sendMessage(peer, text)
@@ -182,59 +181,50 @@ class Bridge(
         val echo = ChatMessage(peerIp = peer, text = text, outgoing = true)
         remember(echo)
         broadcast("message", messageJson(echo))
-        respondJson(ex, OK)
+        respondJson(resp, OK)
     }
 
-    private fun acceptFile(ex: HttpExchange) {
-        if (!requirePost(ex)) return
-        val key = parseQuery(ex.requestBody.use { it.readBytes().toString(Charsets.UTF_8) })["key"].orEmpty()
+    private fun acceptFile(req: Req, resp: Resp) {
+        if (!requirePost(req, resp)) return
+        val key = parseQuery(req.body.use { it.readBytes().toString(Charsets.UTF_8) })["key"].orEmpty()
         if (key.isEmpty()) {
-            respondJson(ex, Json.obj("ok" to false, "error" to "缺少 key"))
+            respondJson(resp, Json.obj("ok" to false, "error" to "缺少 key"))
             return
         }
         hub.accept(key)
-        respondJson(ex, OK)
+        respondJson(resp, OK)
     }
 
     /** 原始字节上传：/api/upload?peer=<ip>&name=<文件名>&inline=0|1 */
-    private fun uploadFile(ex: HttpExchange) {
-        if (!requirePost(ex)) return
-        val q = parseQuery(ex.requestURI.rawQuery)
-        val peer = q["peer"].orEmpty().trim()
-        val name = q["name"].orEmpty()
-        val inline = q["inline"] == "1"
-        respondJson(ex, hub.upload(peer, name, ex.requestBody, inline))
+    private fun uploadFile(req: Req, resp: Resp) {
+        if (!requirePost(req, resp)) return
+        val q = parseQuery(req.query)
+        respondJson(resp, hub.upload(q["peer"].orEmpty().trim(), q["name"].orEmpty(), req.body, q["inline"] == "1"))
     }
 
-    private fun serveBlob(ex: HttpExchange) {
-        val key = parseQuery(ex.requestURI.rawQuery)["k"].orEmpty()
+    private fun serveBlob(req: Req, resp: Resp) {
+        val key = parseQuery(req.query)["k"].orEmpty()
         val blob = hub.blob(key)
         if (blob == null || !blob.file.exists() || blob.file.isDirectory) {
-            respond(ex, 404, TYPE_TEXT, "文件不存在或还没接收")
+            respond(resp, 404, TYPE_TEXT, "文件不存在或还没接收")
             return
         }
-        val mime = java.net.URLConnection.guessContentTypeFromName(blob.file.name)
-            ?: "application/octet-stream"
+        val mime = URLConnection.guessContentTypeFromName(blob.file.name) ?: "application/octet-stream"
         val encodedName = URLEncoder.encode(blob.file.name, "UTF-8").replace("+", "%20")
-        ex.responseHeaders.add("Content-Type", mime)
-        ex.responseHeaders.add(
-            "Content-Disposition",
-            (if (blob.image) "inline" else "attachment") + "; filename*=UTF-8''" + encodedName,
-        )
-        val len = blob.file.length()
-        ex.sendResponseHeaders(200, if (len > 0) len else 0)
-        ex.responseBody.use { out -> blob.file.inputStream().use { it.copyTo(out) } }
+        val disposition = (if (blob.image) "inline" else "attachment") + "; filename*=UTF-8''" + encodedName
+        resp.sendStream(200, mime, blob.file.length(), mapOf("Content-Disposition" to disposition)) { out ->
+            blob.file.inputStream().use { it.copyTo(out) }
+        }
     }
 
     // ---------------- SSE ----------------
 
-    private fun sse(ex: HttpExchange) {
-        ex.responseHeaders.add("Content-Type", "text/event-stream; charset=utf-8")
-        ex.responseHeaders.add("Cache-Control", "no-cache")
-        ex.responseHeaders.add("X-Accel-Buffering", "no")
-        ex.sendResponseHeaders(200, 0)
-
-        val out = ex.responseBody
+    private fun sse(resp: Resp) {
+        val out = resp.startStream(
+            200,
+            "text/event-stream; charset=utf-8",
+            mapOf("Cache-Control" to "no-cache", "X-Accel-Buffering" to "no"),
+        )
         val client = SseClient()
         clients.add(client)
         Log.i(TAG, "SSE 客户端接入，当前 ${clients.size} 个")
@@ -273,9 +263,9 @@ class Bridge(
 
     // ---------------- 工具 ----------------
 
-    private fun requirePost(ex: HttpExchange): Boolean {
-        if (ex.requestMethod != "POST") {
-            respond(ex, 405, TYPE_TEXT, "请用 POST")
+    private fun requirePost(req: Req, resp: Resp): Boolean {
+        if (req.method != "POST") {
+            respond(resp, 405, TYPE_TEXT, "请用 POST")
             return false
         }
         return true
@@ -296,14 +286,11 @@ class Bridge(
         }.toMap()
     }
 
-    private fun respondJson(ex: HttpExchange, body: String) =
-        respond(ex, 200, "application/json; charset=utf-8", body)
+    private fun respondJson(resp: Resp, body: String) =
+        respond(resp, 200, "application/json; charset=utf-8", body)
 
-    private fun respond(ex: HttpExchange, code: Int, contentType: String, body: String) {
-        val bytes = body.toByteArray(Charsets.UTF_8)
-        ex.responseHeaders.add("Content-Type", contentType)
-        ex.sendResponseHeaders(code, bytes.size.toLong())
-        ex.responseBody.use { it.write(bytes) }
+    private fun respond(resp: Resp, code: Int, contentType: String, body: String) {
+        resp.sendBytes(code, contentType, body.toByteArray(Charsets.UTF_8))
     }
 
     private companion object {

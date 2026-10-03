@@ -3,20 +3,21 @@ package com.feiq.droid.bridge
 import android.util.Log
 import com.feiq.droid.core.FeiqEngine
 import com.feiq.droid.core.Peer
+import com.feiq.droid.web.Bridge
 import kotlinx.coroutines.runBlocking
 import java.io.File
 
 /**
- * 飞秋网页桥。
+ * 飞秋网页桥（机顶盒 / 桌面版启动器）。
  *
- * 绑定协议端口接入局域网飞秋/本 App 设备，同时在另一个端口上开网页服务，
+ * 绑定协议端口接入局域网飞秋设备，同时在另一个端口上开网页服务，
  * 让局域网里任何设备的浏览器都能收发消息和文件。
  *
  * 运行：
  *   ./gradlew :bridge:installDist
  *   bridge/build/install/feiq-bridge/bin/feiq-bridge [协议端口] [昵称] [网页端口] [数据目录] [-v]
  *
- * 例：feiq-bridge 2425 客厅大屏 8080
+ * 例：feiq-bridge 2425 大屏 8080
  */
 fun main(args: Array<String>) {
     val positional = args.filterNot { it.startsWith("-") }
@@ -46,7 +47,19 @@ fun main(args: Array<String>) {
             portProvider = { protocolPort },
         )
     )
-    val bridge = Bridge(engine, httpPort, protocolPort, nick, dataDir)
+    val bridge = Bridge(
+        engine = engine,
+        httpPort = httpPort,
+        protocolPort = protocolPort,
+        nick = nick,
+        workDir = dataDir,
+        // 机顶盒端从 classpath 读页面；App 端从 assets 读，两边同一份文件
+        pageProvider = {
+            javaClass.getResourceAsStream("/web/index.html")
+                ?.use { it.readBytes().toString(Charsets.UTF_8) }
+        },
+    )
+    bridge.localIpProvider = { localIp() }
 
     Runtime.getRuntime().addShutdownHook(Thread {
         println()

@@ -1,10 +1,10 @@
-package com.feiq.droid.bridge
+package com.feiq.droid.web
 
 /**
  * 极简 JSON **输出**工具。
  *
- * 桥刻意不引第三方 JSON 库：服务端只需要写 JSON（浏览器发来的操作用表单编码，
- * 不需要 JSON 解析器），手写这点转义就够了，也免得给机顶盒上的部署添依赖。
+ * 刻意不引第三方 JSON 库：服务端只需要写 JSON（浏览器发来的操作用表单/查询参数，
+ * 不需要 JSON 解析器），手写这点转义就够了，也免得给手机 App 和机顶盒部署添依赖。
  */
 object Json {
 

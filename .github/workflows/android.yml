@@ -62,11 +62,41 @@ jobs:
           path: android/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
 
+      - name: Assemble portable bridge bundles (bundled JRE, no install needed)
+        run: |
+          set -euo pipefail
+          DIST=bridge/build/install/feiq-bridge
+          OUTROOT=bridge/build/portable
+          rm -rf "$OUTROOT"
+          mkdir -p "$OUTROOT"
+          # 同时产出 arm64 与 x64 两个自带运行时的包，机顶盒不需要装 JDK
+          for pair in "aarch64:arm64" "x64:x64"; do
+            ARCH="${pair%%:*}"
+            NAME="${pair##*:}"
+            BUNDLE="$OUTROOT/feiq-bridge-linux-$NAME"
+            mkdir -p "$BUNDLE/lib" "$BUNDLE/jre"
+            cp "$DIST"/lib/*.jar "$BUNDLE/lib/"
+            echo "下载 Linux/$ARCH 的 JRE ..."
+            curl -fsSL -o "/tmp/jre-$ARCH.tar.gz" \
+              "https://api.adoptium.net/v3/binary/latest/17/ga/linux/$ARCH/jre/hotspot/normal/eclipse"
+            tar -xzf "/tmp/jre-$ARCH.tar.gz" -C "$BUNDLE/jre" --strip-components=1
+            printf '%s\n' \
+              '#!/bin/sh' \
+              'DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)' \
+              'exec "$DIR/jre/bin/java" -cp "$DIR/lib/*" com.feiq.droid.bridge.MainKt "$@"' \
+              > "$BUNDLE/run.sh"
+            chmod +x "$BUNDLE/run.sh" "$BUNDLE/jre/bin/java"
+            # 打成 tar.gz 而不是散装上传：zip 会丢可执行位，tar 能保住
+            tar -czf "$OUTROOT/feiq-bridge-linux-$NAME.tar.gz" -C "$OUTROOT" "feiq-bridge-linux-$NAME"
+            rm -rf "$BUNDLE"
+          done
+          ls -lh "$OUTROOT"
+
       - name: Upload bridge artifact
         uses: actions/upload-artifact@v4
         with:
           name: feiq-bridge
-          path: android/bridge/build/install/feiq-bridge/**
+          path: android/bridge/build/portable/*.tar.gz
           if-no-files-found: error
 
 
@@ -74,5 +104,7 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: android/app/build/outputs/apk/debug/*.apk
+          files: |
+            android/app/build/outputs/apk/debug/*.apk
+            android/bridge/build/portable/*.tar.gz
           generate_release_notes: true

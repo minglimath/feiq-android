@@ -1,4 +1,4 @@
-package com.feiq.droid.bridge
+package com.feiq.droid.web
 
 import android.util.Log
 import com.feiq.droid.core.FeiqEngine
@@ -20,7 +20,7 @@ import java.util.concurrent.ConcurrentHashMap
  * - 收到的文件/图片 → `workDir/received/`，页面通过 `/api/blob?k=<key>` 下载
  * - 网页上传的文件 → `workDir/outgoing/`，交给引擎发送。**发送期间不能删**
  *   （对方是按需通过 TCP 来拉的，`sendFile` 的 openStream 会被延迟调用），
- *   所以只在进程退出时统一清理。
+ *   所以只在退出时统一清理。
  */
 class MediaHub(
     private val engine: FeiqEngine,
@@ -68,9 +68,12 @@ class MediaHub(
             engine.inlineImages.collect { img ->
                 try {
                     val (ext, _) = ImageType.sniff(img.data)
-                    val f = File(receivedDir, uniqueName("img_${img.imageId}", ext))
+                    val f = File(receivedDir, "img_${img.imageId}.$ext")
                     f.writeBytes(img.data)
-                    val blob = Blob(newKey("img"), img.peerIp, f.name, f, image = true, time = System.currentTimeMillis())
+                    val blob = Blob(
+                        newKey("img"), img.peerIp, f.name, f,
+                        image = true, time = System.currentTimeMillis(),
+                    )
                     blobs[blob.key] = blob
                     emit("image", blobJson(blob))
                 } catch (e: Exception) {
@@ -118,7 +121,10 @@ class MediaHub(
                     dest.outputStream().use { out -> engine.downloadFile(incoming, out) }
                 }
                 if (n >= 0) {
-                    val blob = Blob(newKey("f"), offer.peer, offer.name, dest, image = false, time = System.currentTimeMillis())
+                    val blob = Blob(
+                        newKey("f"), offer.peer, offer.name, dest,
+                        image = false, time = System.currentTimeMillis(),
+                    )
                     blobs[blob.key] = blob
                     emit("file-done", blobJson(blob))
                 } else {
@@ -143,7 +149,10 @@ class MediaHub(
         if (inline) {
             if (size > MAX_INLINE_BYTES) {
                 tmp.delete()
-                return Json.obj("ok" to false, "error" to "图片超过 ${MAX_INLINE_BYTES / 1024 / 1024}MB，请改用「发送文件」")
+                return Json.obj(
+                    "ok" to false,
+                    "error" to "图片超过 ${MAX_INLINE_BYTES / 1024 / 1024}MB，请改用「发送文件」",
+                )
             }
             engine.sendInlineImage(peer, tmp.readBytes())
             tmp.delete()
@@ -197,8 +206,6 @@ class MediaHub(
     private fun newKey(prefix: String) = "$prefix-${UUID.randomUUID()}"
 
     private fun sanitize(name: String) = name.replace(Regex("[\\\\/:*?\"<>|\\r\\n]"), "_").trim()
-
-    private fun uniqueName(base: String, ext: String): String = "$base.${ext}"
 
     private fun uniqueFile(dir: File, name: String): File {
         val safe = sanitize(name).ifBlank { "file" }
