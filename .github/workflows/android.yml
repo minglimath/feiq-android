@@ -52,12 +52,23 @@ jobs:
       - name: Build debug APK
         run: ./gradlew assembleDebug --stacktrace
 
+      - name: Build bridge (JVM)
+        run: ./gradlew :bridge:installDist --stacktrace
+
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: feiq-android-debug
           path: android/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
+
+      - name: Upload bridge artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: feiq-bridge
+          path: android/bridge/build/install/feiq-bridge/**
+          if-no-files-found: error
+
 
       - name: Publish release
         if: startsWith(github.ref, 'refs/tags/')

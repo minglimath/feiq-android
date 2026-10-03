@@ -113,6 +113,7 @@ adb install -r app\build\outputs\apk\debug\app-debug.apk
 - [FeiQ.exe 静态逆向记录](docs/06-FeiQ.exe静态逆向记录.md)
 - [本轮复盘](docs/07-本轮复盘.md)
 - [存储迁移与 CI 自动构建](docs/08-存储迁移与CI自动构建.md)
+- [网页桥接可行性分析](docs/09-网页桥接可行性分析.md)
 
 ## English
 
