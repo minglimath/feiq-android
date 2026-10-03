@@ -8,6 +8,12 @@ import kotlinx.coroutines.runBlocking
 import java.io.File
 
 /**
+ * 只为拿到 classloader 去读打包进 jar 的网页文件。
+ * 顶层函数里没有 `this`，用不了 `javaClass`，所以借一个空对象。
+ */
+private object PageAnchor
+
+/**
  * 飞秋网页桥（机顶盒 / 桌面版启动器）。
  *
  * 绑定协议端口接入局域网飞秋设备，同时在另一个端口上开网页服务，
@@ -55,7 +61,7 @@ fun main(args: Array<String>) {
         workDir = dataDir,
         // 机顶盒端从 classpath 读页面；App 端从 assets 读，两边同一份文件
         pageProvider = {
-            javaClass.getResourceAsStream("/web/index.html")
+            PageAnchor::class.java.getResourceAsStream("/web/index.html")
                 ?.use { it.readBytes().toString(Charsets.UTF_8) }
         },
     )
