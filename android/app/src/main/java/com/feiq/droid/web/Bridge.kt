@@ -224,8 +224,14 @@ class Bridge(
             return
         }
         val mime = URLConnection.guessContentTypeFromName(blob.file.name) ?: "application/octet-stream"
+        // 老浏览器（安卓 5.1 等）不认 RFC 5987 的 filename*，所以再补一个纯 ASCII 的 filename=；
+        // 新浏览器会优先用 filename*，中文名不丢。
+        val asciiName = blob.file.name
+            .replace(Regex("[^\\x20-\\x7E]"), "_")
+            .replace("\"", "_")
         val encodedName = URLEncoder.encode(blob.file.name, "UTF-8").replace("+", "%20")
-        val disposition = (if (blob.image) "inline" else "attachment") + "; filename*=UTF-8''" + encodedName
+        val disposition = (if (blob.image) "inline" else "attachment") +
+            "; filename=\"" + asciiName + "\"; filename*=UTF-8''" + encodedName
         resp.sendStream(200, mime, blob.file.length(), mapOf("Content-Disposition" to disposition)) { out ->
             blob.file.inputStream().use { it.copyTo(out) }
         }
