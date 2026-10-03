@@ -1,116 +1,240 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="auto">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f2f2f7">
 <title>飞秋网页版</title>
 <style>
+  /* 设计语言对齐参考应用「文件闪传」：Apple HIG 语义色 + SF/系统字体 + 软阴影 */
   :root {
-    --bg: #12161c;
-    --panel: #1a1f27;
-    --panel-2: #212733;
-    --line: #2b323d;
-    --fg: #e6eaf0;
-    --fg-dim: #8b97a8;
-    --accent: #2196f3;
-    --ok: #2fbf71;
+    --label: #000;
+    --label-2: rgba(60, 60, 67, .6);
+    --label-3: rgba(60, 60, 67, .3);
+    --bg: #fff;
+    --bg-2: #f2f2f7;
+    --bg-3: #fff;
+    --sidebar: #fbfbfd;
+    --separator: rgba(60, 60, 67, .29);
+    --fill: rgba(118, 118, 128, .12);
+    --fill-2: rgba(118, 118, 128, .2);
+    --blue: #007aff;
+    --blue-hover: #0062cc;
+    --green: #34c759;
+    --red: #ff3b30;
+    --gray: #8e8e93;
+    --gray-3: #c7c7cc;
+    --gray-5: #e5e5ea;
+    --gray-6: #f2f2f7;
+    --shadow-low: 0 1px 2px rgba(0, 0, 0, .08), 0 0 0 1px rgba(0, 0, 0, .06);
+    --shadow-medium: 0 2px 8px rgba(0, 0, 0, .12), 0 0 0 1px rgba(0, 0, 0, .08);
+    --radius: 10px;
+    --spacing-m: 12px;
+    --spacing-l: 16px;
   }
-  * { box-sizing: border-box; }
+  html[data-theme="dark"] {
+    --label: #fff;
+    --label-2: rgba(235, 235, 245, .6);
+    --label-3: rgba(235, 235, 245, .3);
+    --bg: #000;
+    --bg-2: #1c1c1e;
+    --bg-3: #2c2c2e;
+    --sidebar: #1c1c1e;
+    --separator: rgba(84, 84, 88, .65);
+    --fill: rgba(118, 118, 128, .24);
+    --fill-2: rgba(118, 118, 128, .36);
+    --blue: #0a84ff;
+    --blue-hover: #409cff;
+    --green: #30d158;
+    --red: #ff453a;
+    --gray: #8e8e93;
+    --gray-3: #48484a;
+    --gray-5: #3a3a3c;
+    --gray-6: #2c2c2e;
+    --shadow-low: 0 1px 2px rgba(0, 0, 0, .5), 0 0 0 1px rgba(255, 255, 255, .06);
+    --shadow-medium: 0 2px 10px rgba(0, 0, 0, .6), 0 0 0 1px rgba(255, 255, 255, .08);
+  }
+  @media (prefers-color-scheme: dark) {
+    html[data-theme="auto"] {
+      --label: #fff; --label-2: rgba(235, 235, 245, .6); --label-3: rgba(235, 235, 245, .3);
+      --bg: #000; --bg-2: #1c1c1e; --bg-3: #2c2c2e; --sidebar: #1c1c1e;
+      --separator: rgba(84, 84, 88, .65);
+      --fill: rgba(118, 118, 128, .24); --fill-2: rgba(118, 118, 128, .36);
+      --blue: #0a84ff; --blue-hover: #409cff; --green: #30d158; --red: #ff453a;
+      --gray-3: #48484a; --gray-5: #3a3a3c; --gray-6: #2c2c2e;
+      --shadow-low: 0 1px 2px rgba(0, 0, 0, .5), 0 0 0 1px rgba(255, 255, 255, .06);
+      --shadow-medium: 0 2px 10px rgba(0, 0, 0, .6), 0 0 0 1px rgba(255, 255, 255, .08);
+    }
+  }
+
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { height: 100%; margin: 0; }
   body {
-    background: var(--bg); color: var(--fg);
-    font: 15px/1.5 -apple-system, "Segoe UI", "Microsoft YaHei", Roboto, sans-serif;
-    display: flex; flex-direction: column;
+    background: var(--bg); color: var(--label);
+    font-family: "SF Pro Text", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+                 "Microsoft YaHei", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-size: 14px; line-height: 1.45;
+    display: flex; flex-direction: column; overflow: hidden;
   }
-  header {
-    display: flex; align-items: center; gap: 14px;
-    padding: 14px 20px; background: var(--panel);
-    border-bottom: 1px solid var(--line); flex: 0 0 auto;
+
+  /* ---------- 工具栏 ---------- */
+  .toolbar {
+    flex: 0 0 auto; display: flex; align-items: center; gap: var(--spacing-m);
+    padding: 10px var(--spacing-l);
+    background: color-mix(in srgb, var(--bg-3) 88%, transparent);
+    backdrop-filter: saturate(180%) blur(20px);
+    border-bottom: 1px solid var(--separator);
   }
-  .brand { font-size: 20px; font-weight: 700; color: var(--accent); }
-  .meta { color: var(--fg-dim); font-size: 13px; flex: 1; }
-  .dot { width: 10px; height: 10px; border-radius: 50%; background: #7a2b2b; flex: 0 0 auto; }
-  .dot.ok { background: var(--ok); }
+  .title { font-size: 17px; font-weight: 600; letter-spacing: -.2px; }
+  .subtitle { font-size: 12px; color: var(--label-2); flex: 1; min-width: 0;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .spacer { flex: 1; }
+
   button {
-    background: var(--panel-2); color: var(--fg); border: 1px solid var(--line);
-    border-radius: 8px; padding: 8px 14px; font-size: 14px; cursor: pointer;
+    font: inherit; color: var(--label); background: var(--fill);
+    border: none; border-radius: 8px; padding: 7px 13px; cursor: pointer;
+    transition: background .12s ease;
   }
-  button:hover { border-color: var(--accent); }
-  button:disabled { opacity: .45; cursor: default; }
+  button:hover { background: var(--fill-2); }
+  button:active { transform: scale(.98); }
+  button:disabled { opacity: .4; cursor: default; }
+  button.primary { background: var(--blue); color: #fff; font-weight: 600; }
+  button.primary:hover { background: var(--blue-hover); }
+  button.ghost { background: transparent; color: var(--blue); padding: 7px 9px; }
+  button.ghost:hover { background: var(--fill); }
+
+  /* 分段控件（主题切换），对齐参考应用的分段样式 */
+  .segmented {
+    display: inline-flex; background: var(--fill); border-radius: 8px; padding: 2px; gap: 2px;
+  }
+  .segmented button {
+    background: transparent; padding: 5px 11px; border-radius: 6px; font-size: 13px; color: var(--label);
+  }
+  .segmented button.on { background: var(--bg-3); box-shadow: var(--shadow-low); font-weight: 600; }
+
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--red); flex: 0 0 auto; }
+  .dot.ok { background: var(--green); }
+
+  /* ---------- 主体 ---------- */
   main { flex: 1; display: flex; min-height: 0; }
   aside {
-    width: 260px; flex: 0 0 auto; background: var(--panel);
-    border-right: 1px solid var(--line); overflow-y: auto;
+    width: 250px; flex: 0 0 auto; background: var(--sidebar);
+    border-right: 1px solid var(--separator); overflow-y: auto;
   }
-  .peer { padding: 12px 16px; cursor: pointer; border-bottom: 1px solid var(--line); }
-  .peer:hover { background: var(--panel-2); }
-  .peer.on { background: #1e3a55; box-shadow: inset 3px 0 0 var(--accent); }
-  .pn { font-size: 15px; font-weight: 600; }
-  .pi { font-size: 12px; color: var(--fg-dim); margin-top: 2px; }
-  .empty { padding: 20px 16px; color: var(--fg-dim); font-size: 13px; }
-  section { flex: 1; display: flex; flex-direction: column; min-width: 0; }
-  #msgs { flex: 1; overflow-y: auto; padding: 18px; }
-  #msgs.drag { outline: 2px dashed var(--accent); outline-offset: -8px; }
-  .msg { display: flex; flex-direction: column; margin-bottom: 14px; }
+  .side-head {
+    padding: 14px var(--spacing-l) 6px; font-size: 12px; font-weight: 600;
+    color: var(--label-2); text-transform: uppercase; letter-spacing: .3px;
+  }
+  .peer {
+    display: flex; align-items: center; gap: 10px;
+    margin: 2px 8px; padding: 9px 10px; border-radius: 8px; cursor: pointer;
+  }
+  .peer:hover { background: var(--fill); }
+  .peer.on { background: var(--blue); color: #fff; }
+  .peer.on .pi { color: rgba(255, 255, 255, .8); }
+  .avatar {
+    width: 30px; height: 30px; flex: 0 0 auto; border-radius: 50%;
+    background: var(--blue); color: #fff; display: flex; align-items: center;
+    justify-content: center; font-size: 13px; font-weight: 600;
+  }
+  .peer.on .avatar { background: rgba(255, 255, 255, .28); }
+  .pinfo { min-width: 0; }
+  .pn { font-size: 14px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pi { font-size: 12px; color: var(--label-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .empty { padding: 18px var(--spacing-l); color: var(--label-2); font-size: 13px; }
+
+  section { flex: 1; display: flex; flex-direction: column; min-width: 0; background: var(--bg); }
+  #msgs { flex: 1; overflow-y: auto; padding: var(--spacing-l); }
+  #msgs.drag { box-shadow: inset 0 0 0 2px var(--blue); }
+  #msgs:empty::after {
+    content: "选择一个设备开始聊天"; display: block; text-align: center;
+    color: var(--label-3); margin-top: 22vh; font-size: 15px;
+  }
+
+  .msg { display: flex; flex-direction: column; margin-bottom: var(--spacing-m); }
   .msg.out { align-items: flex-end; }
   .msg.in { align-items: flex-start; }
-  .who { font-size: 12px; color: var(--fg-dim); margin-bottom: 3px; }
+  .who { font-size: 11px; color: var(--label-2); margin-bottom: 3px; }
   .bubble {
-    max-width: 68%; padding: 10px 14px; border-radius: 12px;
-    white-space: pre-wrap; word-break: break-word; font-size: 16px;
+    max-width: 62%; padding: 9px 13px; border-radius: 16px; font-size: 15px;
+    white-space: pre-wrap; word-break: break-word;
   }
-  .msg.out .bubble { background: var(--accent); color: #fff; }
-  .msg.in .bubble { background: var(--panel-2); }
-  .t { font-size: 11px; color: var(--fg-dim); margin-top: 4px; }
+  .msg.out .bubble { background: var(--blue); color: #fff; border-bottom-right-radius: 5px; }
+  .msg.in .bubble { background: var(--gray-6); color: var(--label); border-bottom-left-radius: 5px; }
+  html[data-theme="dark"] .msg.in .bubble { background: var(--bg-3); }
+  .t { font-size: 11px; color: var(--label-3); margin-top: 3px; }
+
   .card {
-    max-width: 68%; background: var(--panel-2); border: 1px solid var(--line);
-    border-radius: 12px; padding: 12px 14px; display: flex; gap: 12px; align-items: center;
+    max-width: 62%; display: flex; gap: 11px; align-items: center;
+    background: var(--bg-2); border: 1px solid var(--separator);
+    border-radius: var(--radius); padding: 11px 13px; box-shadow: var(--shadow-low);
   }
-  .card .ic {
-    width: 40px; height: 40px; flex: 0 0 auto; border-radius: 9px;
-    background: #1e3a55; color: var(--accent); display: flex;
-    align-items: center; justify-content: center; font-weight: 700; font-size: 15px;
+  html[data-theme="dark"] .card { background: var(--bg-3); }
+  .ic {
+    width: 38px; height: 38px; flex: 0 0 auto; border-radius: 9px;
+    background: rgba(0, 122, 255, .12); color: var(--blue);
+    display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px;
   }
-  .card .info { min-width: 0; }
-  .card .nm { font-weight: 600; word-break: break-all; }
-  .card .sz { font-size: 12px; color: var(--fg-dim); margin-top: 2px; }
-  .card img { max-width: 320px; max-height: 300px; border-radius: 8px; display: block; }
-  .bar { height: 4px; background: var(--line); border-radius: 2px; margin-top: 8px; overflow: hidden; }
-  .bar > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s; }
-  form {
-    display: flex; gap: 10px; padding: 14px 18px;
-    background: var(--panel); border-top: 1px solid var(--line); flex: 0 0 auto;
+  .ic.bad { background: rgba(255, 59, 48, .12); color: var(--red); }
+  .info { min-width: 0; flex: 1; }
+  .nm { font-size: 14px; font-weight: 500; word-break: break-all; }
+  .sz { font-size: 12px; color: var(--label-2); margin-top: 2px; }
+  .card img { max-width: 300px; max-height: 280px; border-radius: 8px; display: block; }
+  .bar { height: 4px; background: var(--fill); border-radius: 2px; margin-top: 7px; overflow: hidden; }
+  .bar > i { display: block; height: 100%; width: 0; background: var(--blue); transition: width .2s; }
+  a { color: var(--blue); text-decoration: none; }
+
+  /* ---------- 输入区 ---------- */
+  .composer {
+    flex: 0 0 auto; display: flex; align-items: center; gap: 8px;
+    padding: 10px var(--spacing-l);
+    background: color-mix(in srgb, var(--bg-3) 88%, transparent);
+    backdrop-filter: saturate(180%) blur(20px);
+    border-top: 1px solid var(--separator);
   }
-  input[type=text] {
-    flex: 1; background: var(--panel-2); border: 1px solid var(--line);
-    border-radius: 8px; color: var(--fg); padding: 11px 14px; font-size: 16px;
+  .composer input[type=text] {
+    flex: 1; font: inherit; font-size: 15px; color: var(--label);
+    background: var(--fill); border: 1px solid transparent; border-radius: 18px;
+    padding: 9px 15px; min-width: 0;
   }
-  input[type=text]:focus { outline: none; border-color: var(--accent); }
-  form button[type=submit] { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; padding: 11px 22px; }
-  @media (max-width: 720px) {
-    aside { width: 150px; }
-    .bubble, .card { max-width: 84%; }
+  .composer input[type=text]:focus { outline: none; border-color: var(--blue); background: var(--bg); }
+  .progress { font-size: 12px; color: var(--label-2); min-width: 86px; text-align: right; }
+
+  @media (max-width: 760px) {
+    aside { width: 132px; }
+    .bubble, .card { max-width: 86%; }
+    .subtitle { display: none; }
   }
 </style>
 </head>
 <body>
-<header>
-  <div class="brand">飞秋</div>
-  <div class="meta" id="meta">连接中…</div>
-  <div class="meta" id="prog" style="flex:0 0 auto;min-width:120px;text-align:right"></div>
-  <button id="refresh" type="button">刷新设备</button>
+
+<div class="toolbar">
+  <span class="title">飞秋</span>
+  <span class="subtitle" id="meta">连接中…</span>
+  <div class="spacer"></div>
+  <div class="segmented" id="theme">
+    <button type="button" data-t="light">浅色</button>
+    <button type="button" data-t="dark">深色</button>
+    <button type="button" data-t="auto">系统</button>
+  </div>
+  <button type="button" id="refresh">刷新设备</button>
   <div class="dot" id="conn" title="实时连接状态"></div>
-</header>
+</div>
 
 <main>
-  <aside id="peers"><div class="empty">正在搜索局域网设备…</div></aside>
+  <aside>
+    <div class="side-head">设备</div>
+    <div id="peers"><div class="empty">正在搜索局域网设备…</div></div>
+  </aside>
   <section>
     <div id="msgs"></div>
-    <form id="composer" autocomplete="off">
+    <form class="composer" id="composer" autocomplete="off">
       <input id="text" type="text" placeholder="输入消息，回车发送" autocomplete="off">
-      <button type="button" id="sendImg">发图片</button>
-      <button type="button" id="sendFile">发文件</button>
-      <button type="submit">发送</button>
+      <span class="progress" id="prog"></span>
+      <button type="button" id="sendImg">图片</button>
+      <button type="button" id="sendFile">文件</button>
+      <button type="submit" class="primary">发送</button>
     </form>
   </section>
 </main>
@@ -131,35 +255,53 @@
       .replace(/"/g, '&quot;');
   }
   function fmtSize(n) {
-    if (!n && n !== 0) return '';
+    if (n === undefined || n === null) return '';
     if (n < 1024) return n + ' B';
     if (n < 1048576) return (n / 1024).toFixed(1) + ' KB';
     if (n < 1073741824) return (n / 1048576).toFixed(1) + ' MB';
     return (n / 1073741824).toFixed(2) + ' GB';
   }
   function timeText(ms) {
-    try { return new Date(ms).toLocaleTimeString(); } catch (e) { return ''; }
+    try { return new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
+    catch (e) { return ''; }
   }
   function bottom() { msgs.scrollTop = msgs.scrollHeight; }
-  function clearMsgs() { msgs.innerHTML = ''; }
+  function initial(s) { return (String(s || '?').trim().charAt(0) || '?').toUpperCase(); }
 
+  // ---------- 主题 ----------
+  var THEME_KEY = 'feiq-bridge-theme';
+  function applyTheme(t) {
+    document.documentElement.setAttribute('data-theme', t);
+    Array.prototype.forEach.call($('theme').children, function (b) {
+      b.classList.toggle('on', b.getAttribute('data-t') === t);
+    });
+    try { localStorage.setItem(THEME_KEY, t); } catch (e) {}
+  }
+  Array.prototype.forEach.call($('theme').children, function (b) {
+    b.onclick = function () { applyTheme(b.getAttribute('data-t')); };
+  });
+  var savedTheme = 'auto';
+  try { savedTheme = localStorage.getItem(THEME_KEY) || 'auto'; } catch (e) {}
+  applyTheme(savedTheme);
+
+  // ---------- 设备列表 ----------
   function renderPeers() {
     if (!peers.length) {
       $('peers').innerHTML = '<div class="empty">还没有发现设备。<br>确认对方和本机在同一网段，且路由器没开 AP 隔离。</div>';
       return;
     }
     $('peers').innerHTML = peers.map(function (p) {
-      var on = p.ip === current ? ' on' : '';
-      return '<div class="peer' + on + '" data-ip="' + esc(p.ip) + '">' +
-        '<div class="pn">' + esc(p.name) + '</div>' +
-        '<div class="pi">' + esc(p.ip) + (p.group ? ' · ' + esc(p.group) : '') + '</div>' +
-        '</div>';
+      return '<div class="peer' + (p.ip === current ? ' on' : '') + '" data-ip="' + esc(p.ip) + '">' +
+        '<div class="avatar">' + esc(initial(p.name)) + '</div>' +
+        '<div class="pinfo"><div class="pn">' + esc(p.name) + '</div>' +
+        '<div class="pi">' + esc(p.ip) + (p.group ? ' · ' + esc(p.group) : '') + '</div></div></div>';
     }).join('');
     Array.prototype.forEach.call(document.querySelectorAll('.peer'), function (el) {
       el.onclick = function () { current = el.getAttribute('data-ip'); renderPeers(); $('text').focus(); };
     });
   }
 
+  // ---------- 消息 ----------
   function wrap(cls, who, inner, time) {
     var d = document.createElement('div');
     d.className = 'msg ' + cls;
@@ -169,30 +311,23 @@
     bottom();
     return d;
   }
-
   function addMessage(m) {
     wrap(m.outgoing ? 'out' : 'in', m.outgoing ? '我' : (m.peer || ''),
       '<div class="bubble">' + esc(m.text) + '</div>', m.time);
   }
-
   function addImage(ev) {
     wrap('in', ev.peer || '',
       '<div class="card"><img src="' + esc(ev.url) + '" alt="' + esc(ev.name) + '"></div>', ev.time);
   }
-
   function addOffer(o) {
     var d = wrap('in', o.peer || '',
-      '<div class="card">' +
-      '<div class="ic">' + (o.isDir ? '夹' : '文') + '</div>' +
+      '<div class="card"><div class="ic">' + (o.isDir ? '夹' : '文') + '</div>' +
       '<div class="info"><div class="nm">' + esc(o.name) + '</div>' +
-      '<div class="sz">' + (o.isDir ? '文件夹' : fmtSize(o.size)) + ' · 等待接收</div>' +
-      '<div class="bar"><i></i></div></div>' +
-      '<button type="button" class="acc">接收</button>' +
-      '</div>');
+      '<div class="sz">' + (o.isDir ? '文件夹' : fmtSize(o.size)) + ' · 等待接收</div></div>' +
+      '<button type="button" class="primary acc">接收</button></div>');
     var btn = d.querySelector('.acc');
     btn.onclick = function () {
-      btn.disabled = true;
-      btn.textContent = '接收中…';
+      btn.disabled = true; btn.textContent = '接收中';
       fetch('/api/accept', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
@@ -200,18 +335,20 @@
       }).catch(function () { btn.disabled = false; btn.textContent = '接收'; });
     };
   }
-
   function addBlob(b) {
     if (b.image) { addImage({ peer: b.peer, url: b.url, name: b.name, time: b.time }); return; }
     wrap('in', b.peer || '',
-      '<div class="card">' +
-      '<div class="ic">文</div>' +
+      '<div class="card"><div class="ic">文</div>' +
       '<div class="info"><div class="nm">' + esc(b.name) + '</div>' +
       '<div class="sz">' + fmtSize(b.size) + '</div></div>' +
-      '<a href="' + esc(b.url) + '" download><button type="button">下载</button></a>' +
-      '</div>', b.time);
+      '<a href="' + esc(b.url) + '" download><button type="button">下载</button></a></div>', b.time);
   }
-
+  function addFail(d) {
+    wrap('in', d.peer || '',
+      '<div class="card"><div class="ic bad">!</div>' +
+      '<div class="info"><div class="nm">' + esc(d.name || d.key || '文件') + '</div>' +
+      '<div class="sz">失败：' + esc(d.error || '对方已取消或网络中断') + '</div></div></div>');
+  }
   function setProgress(p) {
     if (!p.total) { $('prog').textContent = ''; return; }
     var pct = Math.min(100, Math.round(p.done * 100 / p.total));
@@ -219,15 +356,15 @@
     if (p.done >= p.total) setTimeout(function () { $('prog').textContent = ''; }, 1500);
   }
 
+  // ---------- SSE ----------
   function connect() {
     var es = new EventSource('/api/events');
     es.addEventListener('open', function () { $('conn').classList.add('ok'); });
     es.addEventListener('error', function () { $('conn').classList.remove('ok'); });
-
     es.addEventListener('info', function (e) {
       var d = JSON.parse(e.data);
-      $('meta').textContent = d.nick + ' · ' + (d.localIp || '未知 IP') +
-        ':' + d.httpPort + ' · 协议端口 ' + d.protocolPort;
+      $('meta').textContent = d.nick + ' · ' + (d.localIp || '未知 IP') + ':' + d.httpPort +
+        ' · 协议端口 ' + d.protocolPort;
     });
     es.addEventListener('peers', function (e) {
       peers = JSON.parse(e.data);
@@ -235,7 +372,7 @@
       renderPeers();
     });
     es.addEventListener('history', function (e) {
-      clearMsgs();
+      msgs.innerHTML = '';
       JSON.parse(e.data).forEach(addMessage);
     });
     es.addEventListener('files', function (e) {
@@ -247,22 +384,17 @@
     es.addEventListener('image', function (e) { addImage(JSON.parse(e.data)); });
     es.addEventListener('file-offered', function (e) { addOffer(JSON.parse(e.data)); });
     es.addEventListener('file-done', function (e) { addBlob(JSON.parse(e.data)); });
-    es.addEventListener('file-failed', function (e) {
-      var d = JSON.parse(e.data);
-      wrap('in', d.peer || '', '<div class="card"><div class="ic">!</div>' +
-        '<div class="info"><div class="nm">' + esc(d.name || d.key || '文件') + '</div>' +
-        '<div class="sz">失败：' + esc(d.error || '对方已取消或网络中断') + '</div></div></div>');
-    });
+    es.addEventListener('file-failed', function (e) { addFail(JSON.parse(e.data)); });
     es.addEventListener('progress', function (e) { setProgress(JSON.parse(e.data)); });
   }
 
+  // ---------- 上传 ----------
   function upload(file, inline) {
     if (!current) { alert('请先在左边选择一个设备'); return; }
     $('prog').textContent = '上传中…';
-    var url = '/api/upload?peer=' + encodeURIComponent(current) +
-      '&name=' + encodeURIComponent(file.name) +
-      '&inline=' + (inline ? 1 : 0);
-    fetch(url, { method: 'POST', body: file })
+    fetch('/api/upload?peer=' + encodeURIComponent(current) +
+      '&name=' + encodeURIComponent(file.name) + '&inline=' + (inline ? 1 : 0),
+      { method: 'POST', body: file })
       .then(function (r) { return r.json(); })
       .then(function (j) {
         $('prog').textContent = '';
@@ -297,12 +429,10 @@
   });
   msgs.addEventListener('drop', function (e) {
     var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
-    if (f) upload(f, f.type.indexOf('image/') === 0);
+    if (f) upload(f, (f.type || '').indexOf('image/') === 0);
   });
 
-  $('refresh').addEventListener('click', function () {
-    fetch('/api/refresh', { method: 'POST' }).catch(function () {});
-  });
+  $('refresh').onclick = function () { fetch('/api/refresh', { method: 'POST' }).catch(function () {}); };
 
   connect();
 })();
