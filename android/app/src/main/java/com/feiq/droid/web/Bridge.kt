@@ -21,6 +21,12 @@ import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 
 /**
+ * 上传时把 peer 传成这个值，表示"存到本机（桥所在的设备）"而不是发给飞秋对端。
+ * 网页端硬编码了同一个字符串。
+ */
+const val SELF_PEER = "__self__"
+
+/**
  * 网页桥：把 [FeiqEngine] 的能力通过 HTTP + SSE 暴露给浏览器。
  *
  * 这个类被**手机 App 和机顶盒 JVM 共用**（放在 app 模块里，`:bridge` 通过 srcDirs 复用），
@@ -91,7 +97,8 @@ class Bridge(
     private fun peersJson(): String = Json.arr(peers.map { p ->
         Json.obj(
             "ip" to p.ip,
-            "name" to p.displayName,
+            // 名字可能取不到（对端没带昵称），退回 IP，别让页面显示成空白/问号
+            "name" to p.displayName.ifBlank { p.ip },
             "group" to p.group,
             "user" to p.user,
             "host" to p.host,
@@ -195,11 +202,18 @@ class Bridge(
         respondJson(resp, OK)
     }
 
-    /** 原始字节上传：/api/upload?peer=<ip>&name=<文件名>&inline=0|1 */
+    /** 原始字节上传：/api/upload?peer=<ip|__self__>&name=<文件名>&inline=0|1 */
     private fun uploadFile(req: Req, resp: Resp) {
         if (!requirePost(req, resp)) return
         val q = parseQuery(req.query)
-        respondJson(resp, hub.upload(q["peer"].orEmpty().trim(), q["name"].orEmpty(), req.body, q["inline"] == "1"))
+        val peer = q["peer"].orEmpty().trim()
+        val name = q["name"].orEmpty()
+        // peer=__self__ 表示存到本机（桥所在设备），不走飞秋
+        if (peer == SELF_PEER) {
+            respondJson(resp, hub.saveLocal(name, req.body))
+            return
+        }
+        respondJson(resp, hub.upload(peer, name, req.body, q["inline"] == "1"))
     }
 
     private fun serveBlob(req: Req, resp: Resp) {

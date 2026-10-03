@@ -10,6 +10,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import java.io.File
 import java.io.InputStream
+import java.net.URLConnection
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
@@ -163,6 +164,34 @@ class MediaHub(
         return Json.obj("ok" to true, "mode" to "file", "name" to safeName, "size" to size)
     }
 
+    /**
+     * 网页上传到**本机**（桥所在的设备）的文件：不走飞秋，直接落盘并展示。
+     *
+     * 场景：桥跑在手机上时，"用电脑浏览器把文件传到手机"是最常用的方向，
+     * 而这条路不能靠飞秋（手机就是桥自己，没法发给自己）。
+     */
+    fun saveLocal(name: String, body: InputStream): String {
+        val safeName = sanitize(name).ifBlank { "upload.bin" }
+        return try {
+            val dest = uniqueFile(receivedDir, safeName)
+            dest.outputStream().use { out -> body.copyTo(out) }
+            val blob = Blob(
+                key = newKey("loc"),
+                peer = SELF_LABEL,
+                name = dest.name,
+                file = dest,
+                image = isImageName(dest.name),
+                time = System.currentTimeMillis(),
+            )
+            blobs[blob.key] = blob
+            emit("file-done", blobJson(blob))
+            Json.obj("ok" to true, "mode" to "local", "name" to dest.name, "size" to dest.length())
+        } catch (e: Exception) {
+            Log.w(TAG, "保存上传文件失败: ${e.message}")
+            Json.obj("ok" to false, "error" to e.message)
+        }
+    }
+
     fun blob(key: String): Blob? = blobs[key]
 
     fun offersJson(): String = Json.arr(offers.values.map { offerJson(it) })
@@ -203,6 +232,9 @@ class MediaHub(
 
     private fun offerKey(peer: String, packetId: String, fileId: Int) = "$peer|$packetId|$fileId"
 
+    private fun isImageName(name: String) =
+        URLConnection.guessContentTypeFromName(name)?.startsWith("image/") == true
+
     private fun newKey(prefix: String) = "$prefix-${UUID.randomUUID()}"
 
     private fun sanitize(name: String) = name.replace(Regex("[\\\\/:*?\"<>|\\r\\n]"), "_").trim()
@@ -225,5 +257,8 @@ class MediaHub(
     private companion object {
         const val TAG = "MediaHub"
         const val MAX_INLINE_BYTES = 4L * 1024 * 1024
+
+        /** 上传目标是「本机」时，在文件卡片上显示的名字。 */
+        const val SELF_LABEL = "本机"
     }
 }

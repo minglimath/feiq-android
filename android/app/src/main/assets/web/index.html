@@ -266,7 +266,18 @@
     catch (e) { return ''; }
   }
   function bottom() { msgs.scrollTop = msgs.scrollHeight; }
-  function initial(s) { return (String(s || '?').trim().charAt(0) || '?').toUpperCase(); }
+
+  // 「本机」= 桥所在的这台设备。上传到这里不走飞秋，直接落盘。
+  var SELF = '__self__';
+
+  function label(p) { return (p.name && String(p.name).trim()) || p.ip || '(未知设备)'; }
+
+  function initial(s) {
+    var t = String(s == null ? '' : s).trim();
+    if (!t) return '?';
+    // 按码点取首字：emoji / 中文不会被截成半个字符、显示成问号
+    return Array.from(t)[0].toUpperCase();
+  }
 
   // ---------- 主题 ----------
   var THEME_KEY = 'feiq-bridge-theme';
@@ -286,16 +297,21 @@
 
   // ---------- 设备列表 ----------
   function renderPeers() {
-    if (!peers.length) {
-      $('peers').innerHTML = '<div class="empty">还没有发现设备。<br>确认对方和本机在同一网段，且路由器没开 AP 隔离。</div>';
-      return;
+    var html = '<div class="peer' + (current === SELF ? ' on' : '') + '" data-ip="' + SELF + '">' +
+      '<div class="avatar">本</div>' +
+      '<div class="pinfo"><div class="pn">本机（这台设备）</div>' +
+      '<div class="pi">用「文件」按钮传到这里</div></div></div>';
+    if (peers.length) {
+      html += peers.map(function (p) {
+        return '<div class="peer' + (p.ip === current ? ' on' : '') + '" data-ip="' + esc(p.ip) + '">' +
+          '<div class="avatar">' + esc(initial(label(p))) + '</div>' +
+          '<div class="pinfo"><div class="pn">' + esc(label(p)) + '</div>' +
+          '<div class="pi">' + esc(p.ip) + (p.group ? ' · ' + esc(p.group) : '') + '</div></div></div>';
+      }).join('');
+    } else {
+      html += '<div class="empty">还没发现飞秋设备。<br>确认在同一网段、路由器没开 AP 隔离。<br>仍可用上面的「本机」传文件。</div>';
     }
-    $('peers').innerHTML = peers.map(function (p) {
-      return '<div class="peer' + (p.ip === current ? ' on' : '') + '" data-ip="' + esc(p.ip) + '">' +
-        '<div class="avatar">' + esc(initial(p.name)) + '</div>' +
-        '<div class="pinfo"><div class="pn">' + esc(p.name) + '</div>' +
-        '<div class="pi">' + esc(p.ip) + (p.group ? ' · ' + esc(p.group) : '') + '</div></div></div>';
-    }).join('');
+    $('peers').innerHTML = html;
     Array.prototype.forEach.call(document.querySelectorAll('.peer'), function (el) {
       el.onclick = function () { current = el.getAttribute('data-ip'); renderPeers(); $('text').focus(); };
     });
@@ -390,7 +406,8 @@
 
   // ---------- 上传 ----------
   function upload(file, inline) {
-    if (!current) { alert('请先在左边选择一个设备'); return; }
+    if (!current) { alert('请先在左边选择目标（「本机」或某个飞秋设备）'); return; }
+    if (current === SELF) inline = false;  // 存到本机没有"内联图片"这回事
     $('prog').textContent = '上传中…';
     fetch('/api/upload?peer=' + encodeURIComponent(current) +
       '&name=' + encodeURIComponent(file.name) + '&inline=' + (inline ? 1 : 0),
@@ -407,7 +424,8 @@
     ev.preventDefault();
     var text = $('text').value.trim();
     if (!text) return;
-    if (!current) { alert('请先在左边选择一个设备'); return; }
+    if (!current) { alert('请先在左边选择目标'); return; }
+    if (current === SELF) { alert('「本机」只能收文件；发消息请选一个飞秋设备'); return; }
     $('text').value = '';
     fetch('/api/send', {
       method: 'POST',
