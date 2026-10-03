@@ -2,7 +2,9 @@ package com.feiq.droid.bridge
 
 import android.util.Log
 import com.feiq.droid.core.FeiqEngine
+import com.feiq.droid.core.Peer
 import kotlinx.coroutines.runBlocking
+import java.io.File
 
 /**
  * 飞秋网页桥。
@@ -12,7 +14,7 @@ import kotlinx.coroutines.runBlocking
  *
  * 运行：
  *   ./gradlew :bridge:installDist
- *   bridge/build/install/feiq-bridge/bin/feiq-bridge [协议端口] [昵称] [网页端口] [-v]
+ *   bridge/build/install/feiq-bridge/bin/feiq-bridge [协议端口] [昵称] [网页端口] [数据目录] [-v]
  *
  * 例：feiq-bridge 2425 客厅大屏 8080
  */
@@ -21,6 +23,7 @@ fun main(args: Array<String>) {
     val protocolPort = positional.getOrNull(0)?.toIntOrNull() ?: 2425
     val nick = positional.getOrNull(1)?.takeIf { it.isNotBlank() } ?: "FeiQ-Bridge"
     val httpPort = positional.getOrNull(2)?.toIntOrNull() ?: 8080
+    val dataDir = File(positional.getOrNull(3)?.takeIf { it.isNotBlank() } ?: "feiq-bridge-data")
     Log.verbose = args.contains("-v")
 
     val ip = localIp()
@@ -28,6 +31,7 @@ fun main(args: Array<String>) {
     println("协议端口  : UDP/TCP $protocolPort")
     println("网页端口  : $httpPort")
     println("昵称      : $nick")
+    println("数据目录  : ${dataDir.absolutePath}")
     println()
     println("浏览器打开: http://${ip ?: "<本机IP>"}:$httpPort")
     println()
@@ -42,7 +46,7 @@ fun main(args: Array<String>) {
             portProvider = { protocolPort },
         )
     )
-    val bridge = Bridge(engine, httpPort, protocolPort, nick)
+    val bridge = Bridge(engine, httpPort, protocolPort, nick, dataDir)
 
     Runtime.getRuntime().addShutdownHook(Thread {
         println()
@@ -67,7 +71,7 @@ fun main(args: Array<String>) {
     }
 }
 
-private fun printPeers(peers: List<com.feiq.droid.core.Peer>) {
+private fun printPeers(peers: List<Peer>) {
     println("=== 发现 ${peers.size} 台设备 ===")
     if (peers.isEmpty()) {
         println("  （还没有。确认本机和对方在同一网段，且路由器没开 AP 隔离）")

@@ -10,9 +10,11 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import java.io.File
 import java.io.OutputStream
 import java.net.InetSocketAddress
 import java.net.URLDecoder
+import java.net.URLEncoder
 import java.util.ArrayDeque
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.Executors
@@ -26,17 +28,20 @@ import java.util.concurrent.TimeUnit
  * - HTTP 用 JDK 自带的 `com.sun.net.httpserver`
  * - 服务端 → 浏览器 的推送用 SSE（Server-Sent Events），不用 WebSocket
  *   —— 内置 HttpServer 没有 WebSocket，而推送是单向的，SSE 用普通 HTTP 就够
- * - 浏览器 → 服务端 的操作用表单编码 POST，服务端因此不需要 JSON 解析器
+ * - 浏览器 → 服务端 的操作用表单/查询参数，服务端因此不需要 JSON 解析器
+ * - 上传文件直接以原始字节作为请求体（不走 multipart），省掉一个解析器
  */
 class Bridge(
     private val engine: FeiqEngine,
     private val httpPort: Int,
     private val protocolPort: Int,
     private val nick: String,
+    workDir: File,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val clients = CopyOnWriteArrayList<SseClient>()
     private val recent = ArrayDeque<ChatMessage>()
+    private val hub = MediaHub(engine, workDir, ::broadcast)
 
     @Volatile private var peers: List<Peer> = emptyList()
     private var server: HttpServer? = null
@@ -54,6 +59,7 @@ class Bridge(
         srv.createContext("/") { ex -> handle(ex) }
         srv.start()
         server = srv
+        hub.start()
 
         scope.launch {
             engine.peers.collect { list ->
@@ -76,6 +82,7 @@ class Bridge(
         } catch (_: Exception) {
         }
         server = null
+        hub.stop()
     }
 
     // ---------------- 数据 ----------------
@@ -115,6 +122,11 @@ class Bridge(
         "peerCount" to peers.size,
     )
 
+    private fun filesJson(): String = Json.obj(
+        "offers" to Json.Raw(hub.offersJson()),
+        "blobs" to Json.Raw(hub.blobsJson()),
+    )
+
     // ---------------- 路由 ----------------
 
     private fun handle(ex: HttpExchange) {
@@ -125,8 +137,12 @@ class Bridge(
                 "/api/info" -> respondJson(ex, infoJson())
                 "/api/peers" -> respondJson(ex, peersJson())
                 "/api/history" -> respondJson(ex, historyJson())
+                "/api/files" -> respondJson(ex, filesJson())
                 "/api/events" -> sse(ex)
                 "/api/send" -> sendText(ex)
+                "/api/accept" -> acceptFile(ex)
+                "/api/upload" -> uploadFile(ex)
+                "/api/blob" -> serveBlob(ex)
                 "/api/refresh" -> {
                     engine.refresh()
                     respondJson(ex, OK)
@@ -153,11 +169,8 @@ class Bridge(
     }
 
     private fun sendText(ex: HttpExchange) {
-        if (ex.requestMethod != "POST") {
-            respond(ex, 405, TYPE_TEXT, "请用 POST")
-            return
-        }
-        val form = parseForm(ex)
+        if (!requirePost(ex)) return
+        val form = parseQuery(ex.requestBody.use { it.readBytes().toString(Charsets.UTF_8) })
         val peer = form["peer"].orEmpty().trim()
         val text = form["text"].orEmpty()
         if (peer.isEmpty() || text.isBlank()) {
@@ -170,6 +183,47 @@ class Bridge(
         remember(echo)
         broadcast("message", messageJson(echo))
         respondJson(ex, OK)
+    }
+
+    private fun acceptFile(ex: HttpExchange) {
+        if (!requirePost(ex)) return
+        val key = parseQuery(ex.requestBody.use { it.readBytes().toString(Charsets.UTF_8) })["key"].orEmpty()
+        if (key.isEmpty()) {
+            respondJson(ex, Json.obj("ok" to false, "error" to "缺少 key"))
+            return
+        }
+        hub.accept(key)
+        respondJson(ex, OK)
+    }
+
+    /** 原始字节上传：/api/upload?peer=<ip>&name=<文件名>&inline=0|1 */
+    private fun uploadFile(ex: HttpExchange) {
+        if (!requirePost(ex)) return
+        val q = parseQuery(ex.requestURI.rawQuery)
+        val peer = q["peer"].orEmpty().trim()
+        val name = q["name"].orEmpty()
+        val inline = q["inline"] == "1"
+        respondJson(ex, hub.upload(peer, name, ex.requestBody, inline))
+    }
+
+    private fun serveBlob(ex: HttpExchange) {
+        val key = parseQuery(ex.requestURI.rawQuery)["k"].orEmpty()
+        val blob = hub.blob(key)
+        if (blob == null || !blob.file.exists() || blob.file.isDirectory) {
+            respond(ex, 404, TYPE_TEXT, "文件不存在或还没接收")
+            return
+        }
+        val mime = java.net.URLConnection.guessContentTypeFromName(blob.file.name)
+            ?: "application/octet-stream"
+        val encodedName = URLEncoder.encode(blob.file.name, "UTF-8").replace("+", "%20")
+        ex.responseHeaders.add("Content-Type", mime)
+        ex.responseHeaders.add(
+            "Content-Disposition",
+            (if (blob.image) "inline" else "attachment") + "; filename*=UTF-8''" + encodedName,
+        )
+        val len = blob.file.length()
+        ex.sendResponseHeaders(200, if (len > 0) len else 0)
+        ex.responseBody.use { out -> blob.file.inputStream().use { it.copyTo(out) } }
     }
 
     // ---------------- SSE ----------------
@@ -188,6 +242,7 @@ class Bridge(
             writeFrame(out, "info", infoJson())
             writeFrame(out, "peers", peersJson())
             writeFrame(out, "history", historyJson())
+            writeFrame(out, "files", filesJson())
             while (client.alive) {
                 val frame = client.queue.poll(15, TimeUnit.SECONDS)
                 if (frame == null) {
@@ -218,13 +273,22 @@ class Bridge(
 
     // ---------------- 工具 ----------------
 
-    private fun parseForm(ex: HttpExchange): Map<String, String> {
-        val body = ex.requestBody.use { it.readBytes().toString(Charsets.UTF_8) }
-        if (body.isEmpty()) return emptyMap()
-        return body.split('&').mapNotNull { part ->
+    private fun requirePost(ex: HttpExchange): Boolean {
+        if (ex.requestMethod != "POST") {
+            respond(ex, 405, TYPE_TEXT, "请用 POST")
+            return false
+        }
+        return true
+    }
+
+    /** 解析 `a=1&b=2` 形式的查询串或表单体。 */
+    private fun parseQuery(raw: String?): Map<String, String> {
+        if (raw.isNullOrEmpty()) return emptyMap()
+        return raw.split('&').mapNotNull { part ->
+            if (part.isEmpty()) return@mapNotNull null
             val i = part.indexOf('=')
             if (i < 0) {
-                null
+                URLDecoder.decode(part, "UTF-8") to ""
             } else {
                 URLDecoder.decode(part.substring(0, i), "UTF-8") to
                     URLDecoder.decode(part.substring(i + 1), "UTF-8")
