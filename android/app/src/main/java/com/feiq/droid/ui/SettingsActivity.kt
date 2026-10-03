@@ -14,6 +14,7 @@ import com.feiq.droid.core.NetworkInfo
 import com.feiq.droid.core.Prefs
 import com.feiq.droid.core.Storage
 import com.feiq.droid.core.StoragePermission
+import com.feiq.droid.core.WebServer
 import com.feiq.droid.databinding.ActivitySettingsBinding
 
 private const val REQ_STORAGE_SETTINGS = 3
@@ -45,6 +46,11 @@ class SettingsActivity : BaseActivity() {
         bindSwitch(b.swSound, Prefs.notifySound(this)) { Prefs.setNotifySound(this, it) }
         bindSwitch(b.swAutoFile, Prefs.autoRecvFile(this)) { Prefs.setAutoRecvFile(this, it) }
         bindSwitch(b.swAutoIndex, Prefs.autoIndexImages(this)) { Prefs.setAutoIndexImages(this, it) }
+        bindSwitch(b.swWeb, Prefs.webEnabled(this)) { on ->
+            Prefs.setWebEnabled(this, on)
+            if (App.isStarted()) WebServer.sync(this, App.engine()) else if (!on) WebServer.stop()
+            refreshValues()
+        }
 
         refreshValues()
     }
@@ -62,7 +68,16 @@ class SettingsActivity : BaseActivity() {
         b.valFont.text = fontLabels[Prefs.fontScale(this).coerceIn(0, fontLabels.lastIndex)]
         b.valPort.text = Prefs.port(this).toString()
         b.valStorage.text = storageSummary()
+        b.valWeb.text = webSummary()
         b.valVersion.text = "v${versionName()}"
+    }
+
+    /** 网页访问状态：关着提示怎么用，开着显示访问地址。 */
+    private fun webSummary(): String {
+        if (!Prefs.webEnabled(this)) return "关闭 · 开启后局域网内可用浏览器收发"
+        WebServer.lastError?.let { return "启动失败：$it" }
+        val url = WebServer.url(this)
+        return if (url != null) "$url\n在电脑或手机的浏览器里打开这个地址" else "正在启动…（需要先连上 Wi-Fi）"
     }
 
     /** 当前实际使用的存储目录；未授权时会回退到应用私有目录。 */

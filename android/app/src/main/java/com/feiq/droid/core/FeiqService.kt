@@ -60,6 +60,8 @@ class FeiqService : Service() {
         currentNick = intent?.getStringExtra(EXTRA_NICK) ?: "飞秋安卓"
         currentGroup = intent?.getStringExtra(EXTRA_GROUP) ?: ""
         App.startEngine(this, currentNick, currentGroup)
+        // 手机自己当网页桥：按设置启停，局域网内任何浏览器都能收发（失败原因在 WebServer 里记录）
+        runCatching { WebServer.sync(this, App.engine()) }
         registerNetworkCallback()
         return START_STICKY
     }
@@ -67,6 +69,7 @@ class FeiqService : Service() {
     override fun onDestroy() {
         unregisterNetworkCallback()
         handler.removeCallbacksAndMessages(null)
+        runCatching { WebServer.stop() }
         multicastLock?.let { runCatching { it.release() } }
         App.stopEngine()
         super.onDestroy()
