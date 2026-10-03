@@ -87,6 +87,8 @@
   #scroll.drag { box-shadow: inset 0 0 0 2px #007aff; }
 
   .msg { margin-bottom: 12px; }
+  .msg.out { text-align: right; }
+  .msg.in { text-align: left; }
   .who { font-size: 11px; color: #6b6b70; margin-bottom: 3px; }
   .bubble { display: inline-block; max-width: 70%; padding: 9px 13px; border-radius: 16px;
     font-size: 15px; white-space: pre-wrap; word-wrap: break-word; overflow-wrap: break-word; }
@@ -190,8 +192,8 @@
   </section>
 </main>
 
-<input type="file" id="pickFile" style="display:none">
-<input type="file" id="pickImg" accept="image/*" style="display:none">
+<input type="file" id="pickFile" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0">
+<input type="file" id="pickImg" accept="image/*" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0">
 
 <script>
 /* 全部用 ES5 写：不用箭头函数、模板字符串、let/const、Array.from（老浏览器没有）。
@@ -334,7 +336,7 @@
   // ---------- 消息与文件卡片 ----------
   function appendMessage(m) {
     var d = document.createElement('div');
-    d.className = 'msg';
+    d.className = 'msg ' + (m.outgoing ? 'out' : 'in');
     d.innerHTML = '<div class="who">' + esc(m.outgoing ? '我' : (m.peer || '')) + '</div>' +
       '<div class="bubble ' + (m.outgoing ? 'out' : 'in') + '">' + esc(m.text) + '</div>' +
       '<div class="t">' + esc(timeText(m.time)) + '</div>';
