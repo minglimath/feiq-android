@@ -25,8 +25,6 @@ object Prefs {
     private const val KEY_RICH_HEIGHT = "rich_height"
     private const val KEY_STORAGE_MIGRATED = "storage_migrated"
     private const val KEY_AUTO_INDEX_IMAGES = "auto_index_images"
-    private const val KEY_WEB_ENABLED = "web_enabled"
-    private const val KEY_WEB_PORT = "web_port"
 
     private fun sp(ctx: Context) = ctx.getSharedPreferences(FILE, Context.MODE_PRIVATE)
     private fun peerKey(prefix: String, peerIp: String): String {
@@ -156,15 +154,6 @@ object Prefs {
     fun autoIndexImages(ctx: Context) = sp(ctx).getBoolean(KEY_AUTO_INDEX_IMAGES, true)
     fun setAutoIndexImages(ctx: Context, v: Boolean) =
         sp(ctx).edit().putBoolean(KEY_AUTO_INDEX_IMAGES, v).apply()
-
-    /** 是否开启网页访问（手机自己当桥，局域网内用浏览器收发）。 */
-    fun webEnabled(ctx: Context) = sp(ctx).getBoolean(KEY_WEB_ENABLED, false)
-    fun setWebEnabled(ctx: Context, v: Boolean) =
-        sp(ctx).edit().putBoolean(KEY_WEB_ENABLED, v).apply()
-
-    fun webPort(ctx: Context): Int = sp(ctx).getInt(KEY_WEB_PORT, 8080).coerceIn(1024, 65535)
-    fun setWebPort(ctx: Context, v: Int) =
-        sp(ctx).edit().putInt(KEY_WEB_PORT, v.coerceIn(1024, 65535)).apply()
 
     fun clearSession(ctx: Context, peerIp: String) {
         sp(ctx).edit()

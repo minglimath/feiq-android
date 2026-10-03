@@ -295,34 +295,6 @@
                             android:textSize="12sp" />
                     </LinearLayout>
                 </LinearLayout>
-
-                <View style="@style/SettingDivider" />
-
-                <LinearLayout style="@style/SettingRow">
-                    <LinearLayout
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:orientation="vertical">
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="网页访问"
-                            android:textColor="@color/text_primary"
-                            android:textSize="15sp" />
-                        <TextView
-                            android:id="@+id/valWeb"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="3dp"
-                            android:textColor="@color/text_secondary"
-                            android:textSize="12sp" />
-                    </LinearLayout>
-                    <Switch
-                        android:id="@+id/swWeb"
-                        style="@style/SettingSwitch"
-                        android:layout_marginStart="12dp" />
-                </LinearLayout>
             </LinearLayout>
 
             <TextView

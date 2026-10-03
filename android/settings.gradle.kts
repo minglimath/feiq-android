@@ -14,4 +14,3 @@ dependencyResolutionManagement {
 }
 rootProject.name = "FeiqDroid"
 include(":app")
-include(":bridge")
