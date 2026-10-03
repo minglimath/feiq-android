@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>飞秋网页版</title>
+<style>
+  :root {
+    --bg: #12161c;
+    --panel: #1a1f27;
+    --panel-2: #212733;
+    --line: #2b323d;
+    --fg: #e6eaf0;
+    --fg-dim: #8b97a8;
+    --accent: #2196f3;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg); color: var(--fg);
+    font: 15px/1.5 -apple-system, "Segoe UI", "Microsoft YaHei", Roboto, sans-serif;
+    display: flex; flex-direction: column;
+  }
+  header {
+    display: flex; align-items: center; gap: 14px;
+    padding: 14px 20px; background: var(--panel);
+    border-bottom: 1px solid var(--line); flex: 0 0 auto;
+  }
+  .brand { font-size: 20px; font-weight: 700; color: var(--accent); }
+  .meta { color: var(--fg-dim); font-size: 13px; flex: 1; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: #7a2b2b; }
+  .dot.ok { background: #2fbf71; }
+  button {
+    background: var(--panel-2); color: var(--fg); border: 1px solid var(--line);
+    border-radius: 8px; padding: 8px 14px; font-size: 14px; cursor: pointer;
+  }
+  button:hover { border-color: var(--accent); }
+  main { flex: 1; display: flex; min-height: 0; }
+  aside {
+    width: 260px; flex: 0 0 auto; background: var(--panel);
+    border-right: 1px solid var(--line); overflow-y: auto;
+  }
+  .peer { padding: 12px 16px; cursor: pointer; border-bottom: 1px solid var(--line); }
+  .peer:hover { background: var(--panel-2); }
+  .peer.on { background: #1e3a55; box-shadow: inset 3px 0 0 var(--accent); }
+  .pn { font-size: 15px; font-weight: 600; }
+  .pi { font-size: 12px; color: var(--fg-dim); margin-top: 2px; }
+  .empty { padding: 20px 16px; color: var(--fg-dim); font-size: 13px; }
+  section { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  #msgs { flex: 1; overflow-y: auto; padding: 18px; }
+  .msg { display: flex; flex-direction: column; margin-bottom: 14px; }
+  .msg.out { align-items: flex-end; }
+  .msg.in { align-items: flex-start; }
+  .bubble {
+    max-width: 68%; padding: 10px 14px; border-radius: 12px;
+    white-space: pre-wrap; word-break: break-word; font-size: 16px;
+  }
+  .msg.out .bubble { background: var(--accent); color: #fff; }
+  .msg.in .bubble { background: var(--panel-2); }
+  .t { font-size: 11px; color: var(--fg-dim); margin-top: 4px; }
+  .who { font-size: 12px; color: var(--fg-dim); margin-bottom: 3px; }
+  form {
+    display: flex; gap: 10px; padding: 14px 18px;
+    background: var(--panel); border-top: 1px solid var(--line); flex: 0 0 auto;
+  }
+  input {
+    flex: 1; background: var(--panel-2); border: 1px solid var(--line);
+    border-radius: 8px; color: var(--fg); padding: 11px 14px; font-size: 16px;
+  }
+  input:focus { outline: none; border-color: var(--accent); }
+  form button { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; padding: 11px 22px; }
+  @media (max-width: 720px) {
+    aside { width: 150px; }
+    .bubble { max-width: 84%; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">飞秋</div>
+  <div class="meta" id="meta">连接中…</div>
+  <button id="refresh" type="button">刷新设备</button>
+  <div class="dot" id="conn" title="实时连接状态"></div>
+</header>
+
+<main>
+  <aside id="peers"><div class="empty">正在搜索局域网设备…</div></aside>
+  <section>
+    <div id="msgs"></div>
+    <form id="composer" autocomplete="off">
+      <input id="text" placeholder="输入消息，回车发送" autocomplete="off">
+      <button type="submit">发送</button>
+    </form>
+  </section>
+</main>
+
+<script>
+(function () {
+  var peers = [];
+  var current = null;
+  var $ = function (id) { return document.getElementById(id); };
+
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function timeText(ms) {
+    try { return new Date(ms).toLocaleTimeString(); } catch (e) { return ''; }
+  }
+
+  function renderPeers() {
+    if (!peers.length) {
+      $('peers').innerHTML = '<div class="empty">还没有发现设备。<br>确认对方和本机在同一网段，且路由器没开 AP 隔离。</div>';
+      return;
+    }
+    var html = peers.map(function (p) {
+      var on = p.ip === current ? ' on' : '';
+      return '<div class="peer' + on + '" data-ip="' + esc(p.ip) + '">' +
+        '<div class="pn">' + esc(p.name) + '</div>' +
+        '<div class="pi">' + esc(p.ip) + (p.group ? ' · ' + esc(p.group) : '') + '</div>' +
+        '</div>';
+    }).join('');
+    $('peers').innerHTML = html;
+    Array.prototype.forEach.call(document.querySelectorAll('.peer'), function (el) {
+      el.onclick = function () { current = el.getAttribute('data-ip'); renderPeers(); $('text').focus(); };
+    });
+  }
+
+  function addMsg(m) {
+    var box = $('msgs');
+    var wrap = document.createElement('div');
+    wrap.className = 'msg ' + (m.outgoing ? 'out' : 'in');
+    var who = m.outgoing ? '我' : (m.peer || '');
+    wrap.innerHTML =
+      '<div class="who">' + esc(who) + '</div>' +
+      '<div class="bubble">' + esc(m.text) + '</div>' +
+      '<div class="t">' + esc(timeText(m.time)) + '</div>';
+    box.appendChild(wrap);
+    box.scrollTop = box.scrollHeight;
+  }
+
+  function connect() {
+    var es = new EventSource('/api/events');
+    es.addEventListener('open', function () { $('conn').classList.add('ok'); });
+    es.addEventListener('error', function () { $('conn').classList.remove('ok'); });
+
+    es.addEventListener('info', function (e) {
+      var d = JSON.parse(e.data);
+      $('meta').textContent = d.nick + ' · ' + (d.localIp || '未知 IP') +
+        ':' + d.httpPort + ' · 协议端口 ' + d.protocolPort;
+    });
+    es.addEventListener('peers', function (e) {
+      peers = JSON.parse(e.data);
+      if (current && !peers.some(function (p) { return p.ip === current; })) current = null;
+      renderPeers();
+    });
+    es.addEventListener('history', function (e) {
+      $('msgs').innerHTML = '';
+      JSON.parse(e.data).forEach(addMsg);
+    });
+    es.addEventListener('message', function (e) { addMsg(JSON.parse(e.data)); });
+  }
+
+  $('composer').addEventListener('submit', function (ev) {
+    ev.preventDefault();
+    var text = $('text').value.trim();
+    if (!text) return;
+    if (!current) { alert('请先在左边选择一个设备'); return; }
+    $('text').value = '';
+    fetch('/api/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+      body: 'peer=' + encodeURIComponent(current) + '&text=' + encodeURIComponent(text)
+    }).catch(function () { alert('发送失败，检查网页服务是否还在运行'); });
+  });
+
+  $('refresh').addEventListener('click', function () {
+    fetch('/api/refresh', { method: 'POST' }).catch(function () {});
+  });
+
+  connect();
+})();
+</script>
+</body>
+</html>
